@@ -28,11 +28,11 @@ export default function ReadPage() {
   const params = useParams()
   const bookId = params.book as string
   const chapterParam = params.chapter as string
-  const chapterNumber = parseInt(chapterParam, 10)
 
   const [chapter, setChapter] = useState<Chapter | null>(null)
   const [totalChapters, setTotalChapters] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [currentChapterNum, setCurrentChapterNum] = useState(() => parseInt(chapterParam || "1", 10))
   
   // AI 聊天相关状态
   const [messages, setMessages] = useState<Message[]>([])
@@ -69,6 +69,7 @@ export default function ReadPage() {
   const resizeStartWidth = useRef(0)
   const lastChatWidthRef = useRef(chatWidth)
   const [showToc, setShowToc] = useState(false)
+  const [contentTransitioning, setContentTransitioning] = useState(false)
   const contentScrollRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!bookId || chapterParam === undefined || chapterParam === '') {
@@ -90,6 +91,7 @@ export default function ReadPage() {
     const book = getBook(bookId)
 
     if (isVersionPage) {
+      setCurrentChapterNum(0)
       setChapter(null)
       setTotalChapters(total)
       setLoading(false)
@@ -114,6 +116,7 @@ export default function ReadPage() {
       return
     }
 
+    setCurrentChapterNum(num)
     setChapter(chapterData)
     setTotalChapters(total)
     setLoading(false)
@@ -203,25 +206,68 @@ export default function ReadPage() {
   }, [isResizing, chatWidth])
 
 
+  // 切换章节：仅更新状态和 URL，不触发 router 导航；内容区带淡入淡出渐变
+  const switchToChapter = useCallback((num: number) => {
+    setContentTransitioning(true)
+    setTimeout(() => {
+      setCurrentChapterNum(num)
+      const total = getTotalChapters(bookId)
+      const book = getBook(bookId)
+      const isVersionPage = num === 0 && hasVersionPage(bookId)
+
+      if (isVersionPage) {
+        setChapter(null)
+        setTotalChapters(total)
+        setLoading(false)
+        if (book?.versionNote) {
+          setSceneMeta({
+            aiRole: book.author || "经典解读助手",
+            userRole: "学生",
+            context: `你正在阅读《${book.book}》的版本说明。内容如下：\n\n${book.versionNote}\n\n请基于以上版本说明，用现代人容易听懂的白话文帮助学生理解该版本的选取理由和相关背景。`,
+            scenario: `${book.book} - 版本说明`
+          })
+        } else setSceneMeta(null)
+        setMessages([])
+      } else {
+        const chapterData = getChapter(bookId, num)
+        if (!chapterData) {
+          setContentTransitioning(false)
+          return
+        }
+        setChapter(chapterData)
+        setTotalChapters(total)
+        setLoading(false)
+        if (book && chapterData) {
+          setSceneMeta({
+            aiRole: book.author || "经典解读助手",
+            userRole: "学生",
+            context: `你正在阅读《${book.book}》的${chapterData.title}。本章内容如下：\n\n${chapterData.content}\n\n请基于本章内容，用现代人容易听懂的白话文帮助学生理解经典的含义和智慧。回复时请用「你」直接对读者讲解，用第二人称。若原文有对比或递进（如无欲/有欲、妙/徼），请明确区分二者含义与层次，避免把两种状态说成并列、等同；例如「常无欲以观其妙，常有欲以观其徼」中，无欲才能观其妙，有欲时只能观其徼（边界），二者不是并列的两种观察方式。`,
+            scenario: `${book.book} - ${chapterData.title}`
+          })
+        }
+        setMessages([])
+      }
+      contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", `/read/${bookId}/${num}`)
+      }
+      setContentTransitioning(false)
+    }, 180)
+  }, [bookId])
+
   const handleGoToChapter = (ch: number) => {
     setShowToc(false)
-    router.push(`/read/${bookId}/${ch}`)
+    switchToChapter(ch)
   }
 
   const handlePrevChapter = () => {
-    const prev = getPrevChapter(bookId, chapterNumber)
-    if (prev != null) {
-      contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      router.push(`/read/${bookId}/${prev}`, { scroll: false })
-    }
+    const prev = getPrevChapter(bookId, currentChapterNum)
+    if (prev != null) switchToChapter(prev)
   }
 
   const handleNextChapter = () => {
-    const next = getNextChapter(bookId, chapterNumber)
-    if (next != null) {
-      contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      router.push(`/read/${bookId}/${next}`, { scroll: false })
-    }
+    const next = getNextChapter(bookId, currentChapterNum)
+    if (next != null) switchToChapter(next)
   }
 
   const handleGoHome = () => {
@@ -319,17 +365,9 @@ export default function ReadPage() {
     sendMessage(text)
   }
 
-  const isVersionPage = chapterNumber === 0 && hasVersionPage(bookId)
+  const isVersionPage = currentChapterNum === 0 && hasVersionPage(bookId)
   const pageTitle = isVersionPage ? "版本说明" : (chapter?.title ?? "")
   const showContent = !loading && (chapter || isVersionPage)
-
-  if (!showContent) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-amber-50">
-        <div className="text-gray-600">加载中...</div>
-      </div>
-    )
-  }
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-b from-amber-50 to-amber-100">
@@ -358,8 +396,13 @@ export default function ReadPage() {
                 目录
               </Button>
             </div>
-            {/* 内容区：正文或版本详情（全宽，箭头悬浮不占空间） */}
-            <div className="min-h-[50vh]">
+            {/* 内容区：正文或版本详情（全宽），切换时淡入淡出 */}
+            <div className={`min-h-[50vh] transition-opacity duration-200 ease-out ${contentTransitioning ? "opacity-0" : "opacity-100"}`}>
+              {!showContent ? (
+                <div className="max-w-[44rem] mx-auto py-20 flex justify-center">
+                  <span className="text-gray-500 text-sm">加载中...</span>
+                </div>
+              ) : (
               <article className="read-content max-w-[44rem] mx-auto py-10 md:py-16 px-4 md:px-12">
                 {isVersionPage ? (
                   /* 版本详情页 */
@@ -409,6 +452,7 @@ export default function ReadPage() {
                   </>
                 ) : null}
               </article>
+              )}
             </div>
           </div>
           {/* 页脚：始终在底部 */}
@@ -441,7 +485,7 @@ export default function ReadPage() {
                       type="button"
                       onClick={() => handleGoToChapter(0)}
                       className={`w-full text-left py-2.5 px-3 rounded-lg text-sm transition-colors ${
-                        chapterNumber === 0 ? "bg-amber-100 text-amber-900 font-medium" : "text-gray-700 hover:bg-amber-50"
+                        currentChapterNum === 0 ? "bg-amber-100 text-amber-900 font-medium" : "text-gray-700 hover:bg-amber-50"
                       }`}
                     >
                       版本说明
@@ -453,7 +497,7 @@ export default function ReadPage() {
                       type="button"
                       onClick={() => handleGoToChapter(ch.chapter)}
                       className={`w-full text-left py-2.5 px-3 rounded-lg text-sm transition-colors ${
-                        chapterNumber === ch.chapter ? "bg-amber-100 text-amber-900 font-medium" : "text-gray-700 hover:bg-amber-50"
+                        currentChapterNum === ch.chapter ? "bg-amber-100 text-amber-900 font-medium" : "text-gray-700 hover:bg-amber-50"
                       }`}
                     >
                       {ch.title}
@@ -468,7 +512,7 @@ export default function ReadPage() {
             <div className="pointer-events-auto">
               <Button
                 onClick={handlePrevChapter}
-                disabled={getPrevChapter(bookId, chapterNumber) === null}
+                disabled={getPrevChapter(bookId, currentChapterNum) === null}
                 variant="outline"
                 size="icon"
                 className={`rounded-full border shadow-md ${navPrevColor.bg} ${navPrevColor.border} ${navPrevColor.text} ${navPrevColor.hover} disabled:opacity-50 h-10 w-10 md:h-12 md:w-12`}
@@ -483,7 +527,7 @@ export default function ReadPage() {
             <div className="pointer-events-auto">
               <Button
                 onClick={handleNextChapter}
-                disabled={getNextChapter(bookId, chapterNumber) === null}
+                disabled={getNextChapter(bookId, currentChapterNum) === null}
                 variant="outline"
                 size="icon"
                 className={`rounded-full border shadow-md ${navNextColor.bg} ${navNextColor.border} ${navNextColor.text} ${navNextColor.hover} disabled:opacity-50 h-10 w-10 md:h-12 md:w-12`}
