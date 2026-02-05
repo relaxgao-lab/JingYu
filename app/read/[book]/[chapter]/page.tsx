@@ -337,10 +337,24 @@ export default function ReadPage() {
 
   const extractSpeakContent = (content: string) => {
     if (!content) return content
-    return content
-      .replace(/\[\/SPEAK\]/gi, '')
-      .replace(/\[SPEAK\]/gi, '')
-      .trim() || content
+    
+    // 检查内容是否完全被 [SPEAK]...[/SPEAK] 包裹
+    const fullMatch = content.match(/^\s*\[\s*SPEAK\s*\]([\s\S]*?)\[\s*\/\s*SPEAK\s*\]\s*$/i)
+    if (fullMatch && fullMatch[1]) {
+      // 如果完全被包裹，只返回标签内的内容
+      return fullMatch[1].trim()
+    }
+    
+    // 否则，移除所有 [SPEAK]...[/SPEAK] 标签对（包括带空格的变体）
+    let cleaned = content.replace(/\[\s*SPEAK\s*\][\s\S]*?\[\s*\/\s*SPEAK\s*\]/gi, '')
+    
+    // 移除残留的单独标签
+    cleaned = cleaned
+      .replace(/\[\s*\/\s*SPEAK\s*\]/gi, '')
+      .replace(/\[\s*SPEAK\s*\]/gi, '')
+      .trim()
+    
+    return cleaned || content
   }
 
   // 配色参考首页 pastel 卡片（快捷按钮 + 上一章/下一章/语音开关共用）
@@ -351,6 +365,27 @@ export default function ReadPage() {
     { bg: "bg-amber-100", border: "border-amber-200", text: "text-amber-800", hover: "hover:bg-amber-200/50" },
     { bg: "bg-emerald-100", border: "border-emerald-200", text: "text-emerald-700", hover: "hover:bg-emerald-200/50" },
   ]
+  
+  // 章节卡片颜色方案（参考 sages.relaxgao.com - 柔和 pastel 色）
+  const chapterCardColors = [
+    { bg: "bg-slate-50", border: "border-slate-200", text: "text-slate-600", avatarBg: "bg-slate-100", avatarText: "text-slate-700", hover: "hover:bg-slate-100", ring: "focus:ring-slate-200" },
+    { bg: "bg-violet-50", border: "border-violet-200", text: "text-violet-600", avatarBg: "bg-violet-100", avatarText: "text-violet-700", hover: "hover:bg-violet-100", ring: "focus:ring-violet-200" },
+    { bg: "bg-pink-50", border: "border-pink-200", text: "text-pink-600", avatarBg: "bg-pink-100", avatarText: "text-pink-700", hover: "hover:bg-pink-100", ring: "focus:ring-pink-200" },
+    { bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-700", avatarBg: "bg-amber-100", avatarText: "text-amber-800", hover: "hover:bg-amber-100", ring: "focus:ring-amber-200" },
+    { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-600", avatarBg: "bg-emerald-100", avatarText: "text-emerald-700", hover: "hover:bg-emerald-100", ring: "focus:ring-emerald-200" },
+    { bg: "bg-sky-50", border: "border-sky-200", text: "text-sky-600", avatarBg: "bg-sky-100", avatarText: "text-sky-700", hover: "hover:bg-sky-100", ring: "focus:ring-sky-200" },
+    { bg: "bg-teal-50", border: "border-teal-200", text: "text-teal-600", avatarBg: "bg-teal-100", avatarText: "text-teal-700", hover: "hover:bg-teal-100", ring: "focus:ring-teal-200" },
+    { bg: "bg-orange-50", border: "border-orange-200", text: "text-orange-600", avatarBg: "bg-orange-100", avatarText: "text-orange-700", hover: "hover:bg-orange-100", ring: "focus:ring-orange-200" },
+    { bg: "bg-cyan-50", border: "border-cyan-200", text: "text-cyan-600", avatarBg: "bg-cyan-100", avatarText: "text-cyan-700", hover: "hover:bg-cyan-100", ring: "focus:ring-cyan-200" },
+    { bg: "bg-rose-50", border: "border-rose-200", text: "text-rose-600", avatarBg: "bg-rose-100", avatarText: "text-rose-700", hover: "hover:bg-rose-100", ring: "focus:ring-rose-200" },
+    { bg: "bg-indigo-50", border: "border-indigo-200", text: "text-indigo-600", avatarBg: "bg-indigo-100", avatarText: "text-indigo-700", hover: "hover:bg-indigo-100", ring: "focus:ring-indigo-200" },
+    { bg: "bg-lime-50", border: "border-lime-200", text: "text-lime-600", avatarBg: "bg-lime-100", avatarText: "text-lime-700", hover: "hover:bg-lime-100", ring: "focus:ring-lime-200" },
+  ]
+  
+  // 根据章节索引获取颜色（确保同一章节总是相同颜色）
+  const getChapterColor = (chapterIndex: number) => {
+    return chapterCardColors[chapterIndex % chapterCardColors.length]
+  }
   const navPrevColor = presetColors[0]
   const navNextColor = presetColors[1]
   const voiceToggleColor = presetColors[4]
@@ -370,25 +405,33 @@ export default function ReadPage() {
   const showContent = !loading && (chapter || isVersionPage)
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-b from-amber-50 to-amber-100">
+    <div className="h-screen flex flex-col bg-stone-50/60">
       {/* 主要内容区域 - 左右分栏，右侧宽度可拖拽 */}
       <div className="flex-1 flex overflow-hidden">
         {/* 左侧：章节内容 */}
-        <div className="flex-1 min-w-0 flex flex-col overflow-hidden border-r border-amber-200/80 bg-[#faf9f6] relative">
-          <div ref={contentScrollRef} className="flex-1 overflow-y-auto">
-            {/* 页面内导航：返回首页、目录（章节信息在页脚） */}
-            <div className="sticky top-0 z-10 max-w-[44rem] mx-auto px-6 md:px-12 py-4 flex items-center justify-between gap-3 bg-[#faf9f6]/95 backdrop-blur-sm border-b border-amber-200/60 -mb-px">
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden border-r border-gray-200 bg-white relative">
+          {/* 页面内导航：返回首页、标题、目录（章节信息在页脚） */}
+          <div className="sticky top-0 z-10 max-w-[44rem] mx-auto w-full px-6 md:px-12 py-2 bg-white/95 backdrop-blur-sm border-b border-gray-200 shrink-0">
+            <div className="flex items-center justify-between gap-3">
               <Button
                 variant="ghost"
                 onClick={handleGoHome}
-                className="text-gray-600 hover:text-gray-900 hover:bg-amber-100/60 -ml-2"
+                className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 -ml-2 shrink-0"
               >
                 ← 返回首页
               </Button>
+              {showContent && (
+                <h1 
+                  className="text-lg md:text-xl font-semibold text-gray-900 tracking-tight text-center leading-tight flex-1"
+                  style={{ fontFamily: '"LXGW WenKai", "Noto Serif SC", serif' }}
+                >
+                  {isVersionPage ? "版本说明" : chapter?.title ?? ""}
+                </h1>
+              )}
               <Button
                 variant="ghost"
                 onClick={() => setShowToc(true)}
-                className="text-gray-600 hover:text-gray-900 hover:bg-amber-100/60"
+                className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 shrink-0"
                 title="目录"
                 aria-label="目录"
               >
@@ -396,67 +439,61 @@ export default function ReadPage() {
                 目录
               </Button>
             </div>
+          </div>
+          <div ref={contentScrollRef} className="flex-1 overflow-y-auto min-h-0">
             {/* 内容区：正文或版本详情（全宽），切换时淡入淡出 */}
-            <div className={`min-h-[50vh] transition-opacity duration-200 ease-out ${contentTransitioning ? "opacity-0" : "opacity-100"}`}>
+            <div className={`min-h-full flex items-center justify-center transition-opacity duration-200 ease-out ${contentTransitioning ? "opacity-0" : "opacity-100"}`}>
               {!showContent ? (
-                <div className="max-w-[44rem] mx-auto py-20 flex justify-center">
+                <div className="flex items-center justify-center">
                   <span className="text-gray-500 text-sm">加载中...</span>
                 </div>
-              ) : (
-              <article className="read-content max-w-[44rem] mx-auto py-10 md:py-16 px-4 md:px-12">
-                {isVersionPage ? (
-                  /* 版本详情页 */
-                  <>
-                    <header className="text-center mb-10 md:mb-14">
-                      <h1 
-                        className="text-2xl md:text-4xl font-semibold text-gray-900 tracking-tight mb-4"
-                        style={{ fontFamily: '"LXGW WenKai", "Noto Serif SC", serif' }}
-                      >
-                        版本说明
-                      </h1>
-                      <div className="w-20 h-px bg-gradient-to-r from-transparent via-amber-300 to-transparent mx-auto opacity-80" aria-hidden />
-                    </header>
-                    <div 
-                      className="read-body select-text text-base md:text-lg leading-relaxed text-gray-800"
-                      style={{ fontFamily: '"LXGW WenKai", "Noto Serif SC", serif', userSelect: 'text', WebkitUserSelect: 'text' }}
-                    >
-                      <p className="whitespace-pre-wrap">{getBook(bookId)?.versionNote ?? ""}</p>
-                    </div>
-                  </>
-                ) : chapter ? (
-                  /* 章节正文 */
-                  <>
-                    <header className="text-center mb-10 md:mb-14">
-                      <h1 
-                        className="text-2xl md:text-4xl font-semibold text-gray-900 tracking-tight mb-4"
-                        style={{ fontFamily: '"LXGW WenKai", "Noto Serif SC", serif' }}
-                      >
-                        {chapter.title}
-                      </h1>
-                      <div className="w-20 h-px bg-gradient-to-r from-transparent via-amber-300 to-transparent mx-auto opacity-80" aria-hidden />
-                    </header>
-
-                    <div 
-                      className="read-body select-text"
-                      style={{ fontFamily: '"LXGW WenKai", "Noto Serif SC", serif', userSelect: 'text', WebkitUserSelect: 'text' }}
-                    >
-                      {chapter.content
-                        .split('\n')
-                        .filter(Boolean)
-                        .map((line, i) => (
-                          <p key={i} className="text-lg md:text-xl leading-[2] text-gray-800 text-center mb-5 last:mb-0 tracking-wide">
-                            {line}
-                          </p>
-                        ))}
-                    </div>
-                  </>
-                ) : null}
-              </article>
-              )}
+              ) : (() => {
+                // 获取当前章节的颜色
+                const chapterColor = isVersionPage 
+                  ? getChapterColor(0) 
+                  : chapter 
+                    ? getChapterColor(chapter.chapter) 
+                    : chapterCardColors[0]
+                
+                return (
+                  /* 正文内容：在页面中上下左右居中 */
+                  <article className="read-content max-w-[42rem] w-full mx-auto px-5 md:px-10 py-6">
+                      {isVersionPage ? (
+                        /* 版本详情页 */
+                        <div 
+                          className="read-body select-text text-base md:text-lg leading-[1.5] md:leading-[1.55] text-gray-800 text-left w-full font-bold"
+                          style={{ fontFamily: '"LXGW WenKai", "Noto Serif SC", serif', userSelect: 'text', WebkitUserSelect: 'text' }}
+                        >
+                          <div className="whitespace-pre-wrap space-y-1 md:space-y-1.5">{getBook(bookId)?.versionNote ?? ""}</div>
+                        </div>
+                      ) : chapter ? (
+                        /* 章节正文 */
+                        <div 
+                          className="read-body select-text w-full text-gray-800"
+                          style={{ fontFamily: '"LXGW WenKai", "Noto Serif SC", serif', userSelect: 'text', WebkitUserSelect: 'text' }}
+                        >
+                          <div className="space-y-1 md:space-y-1.5">
+                            {chapter.content
+                              .split('\n')
+                              .filter(Boolean)
+                              .map((line, i) => (
+                                <p 
+                                  key={i} 
+                                  className="text-base md:text-lg leading-[1.5] md:leading-[1.55] text-gray-800 text-left tracking-normal font-bold"
+                                >
+                                  {line}
+                                </p>
+                              ))}
+                          </div>
+                        </div>
+                      ) : null}
+                  </article>
+                )
+              })()}
             </div>
           </div>
           {/* 页脚：始终在底部 */}
-          <footer className="shrink-0 py-4 px-6 border-t border-amber-200/60 bg-[#faf9f6]">
+          <footer className="shrink-0 py-4 px-6 border-t border-gray-200 bg-white">
             <div className="max-w-[44rem] mx-auto text-center">
               <span className="text-xs md:text-sm text-gray-500 tracking-widest">
                 {pageTitle} / 共{totalChapters}章
@@ -558,10 +595,10 @@ export default function ReadPage() {
           style={{ width: chatWidth, minWidth: MIN_CHAT_WIDTH }}
         >
           {/* 聊天标题 */}
-          <div className="shrink-0 px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-2">
+          <div className="shrink-0 px-4 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-2">
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-gray-700">AI 解读助手</h3>
-              <p className="text-xs text-gray-500 mt-1">基于当前章节内容提问</p>
+              <p className="text-xs text-gray-500 mt-0.5">基于当前章节内容提问</p>
             </div>
             <Button
               type="button"
@@ -690,47 +727,51 @@ export default function ReadPage() {
                 </Button>
               </div>
             )}
-            <form onSubmit={handleSubmit} className="flex items-end gap-1">
-              <Textarea
-                ref={textareaRef}
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    if (inputText.trim() && !isLoadingChat && speechStatus !== "recording" && speechStatus !== "processing") {
-                      handleSubmit(e)
+            <form onSubmit={handleSubmit}>
+              <div className="flex flex-col rounded-lg border border-gray-300 bg-white shadow-sm focus-within:border-emerald-400 focus-within:ring-1 focus-within:ring-emerald-400/20 transition-all">
+                <Textarea
+                  ref={textareaRef}
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      if (inputText.trim() && !isLoadingChat && speechStatus !== "recording" && speechStatus !== "processing") {
+                        handleSubmit(e)
+                      }
                     }
-                  }
-                }}
-                placeholder="输入或语音...（Shift+Enter 换行）"
-                disabled={isLoadingChat || !sceneMeta || speechStatus === "processing"}
-                className="flex-1 min-h-[44px] max-h-[120px] text-sm resize-none"
-                rows={1}
-              />
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                onClick={handleVoiceToggle}
-                disabled={isLoadingChat || !sceneMeta || speechStatus === "processing"}
-                className="shrink-0 h-11 w-11 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                title={speechStatus === "recording" ? "停止录音" : "语音输入"}
-              >
-                {speechStatus === "recording" ? (
-                  <StopCircle className="h-5 w-5 text-red-500" />
-                ) : (
-                  <Mic className="h-5 w-5" />
-                )}
-              </Button>
-              <Button
-                type="submit"
-                size="icon"
-                disabled={!inputText.trim() || isLoadingChat || !sceneMeta}
-                className="shrink-0 h-11 w-11 bg-emerald-600 hover:bg-emerald-700"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
+                  }}
+                  placeholder="输入或语音...（Shift+Enter 换行）"
+                  disabled={isLoadingChat || !sceneMeta || speechStatus === "processing"}
+                  className="block w-full min-h-[44px] max-h-[120px] text-sm resize-none pt-2.5 px-3 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent placeholder:text-gray-400"
+                  rows={1}
+                />
+                <div className="flex items-center justify-end gap-1.5 p-1.5 shrink-0">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    onClick={handleVoiceToggle}
+                    disabled={isLoadingChat || !sceneMeta || speechStatus === "processing"}
+                    className="h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md disabled:opacity-50 transition-colors"
+                    title={speechStatus === "recording" ? "停止录音" : "语音输入"}
+                  >
+                    {speechStatus === "recording" ? (
+                      <StopCircle className="h-4 w-4 text-red-500" />
+                    ) : (
+                      <Mic className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    type="submit"
+                    size="icon"
+                    disabled={!inputText.trim() || isLoadingChat || !sceneMeta}
+                    className="h-8 w-8 bg-emerald-600 hover:bg-emerald-700 rounded-md disabled:opacity-50 transition-colors shadow-sm"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </form>
           </div>
         </div>

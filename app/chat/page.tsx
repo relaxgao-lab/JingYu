@@ -259,19 +259,21 @@ export default function ChatPage() {
   const extractSpeakContent = (content: string) => {
     if (!content) return content
     
-    // 先移除所有 [SPEAK]...[/SPEAK] 标签（包括格式错误的）
-    let cleaned = content.replace(/\[SPEAK\][\s\S]*?\[\/SPEAK\]/gi, '')
-    
-    // 如果移除标签后内容为空，尝试提取标签内的内容
-    if (!cleaned.trim()) {
-      const m = content.match(/\[SPEAK\]([\s\S]*?)\[\/SPEAK\]/i)
-      if (m && m[1]) {
-        cleaned = m[1].trim()
-      }
+    // 检查内容是否完全被 [SPEAK]...[/SPEAK] 包裹
+    const fullMatch = content.match(/^\s*\[\s*SPEAK\s*\]([\s\S]*?)\[\s*\/\s*SPEAK\s*\]\s*$/i)
+    if (fullMatch && fullMatch[1]) {
+      // 如果完全被包裹，只返回标签内的内容
+      return fullMatch[1].trim()
     }
     
-    // 再次清理，确保没有残留的标签
-    cleaned = cleaned.replace(/\[SPEAK\][\s\S]*?\[\/SPEAK\]/gi, '').trim()
+    // 否则，移除所有 [SPEAK]...[/SPEAK] 标签对（包括带空格的变体）
+    let cleaned = content.replace(/\[\s*SPEAK\s*\][\s\S]*?\[\s*\/\s*SPEAK\s*\]/gi, '')
+    
+    // 移除残留的单独标签
+    cleaned = cleaned
+      .replace(/\[\s*\/\s*SPEAK\s*\]/gi, '')
+      .replace(/\[\s*SPEAK\s*\]/gi, '')
+      .trim()
     
     return cleaned || content
   }
@@ -497,7 +499,7 @@ export default function ChatPage() {
 
             <div className="sticky bottom-0 w-full border-t border-stone-200 bg-white/95 p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] z-10 shadow-[0_-2px_8px_rgba(0,0,0,0.05)] backdrop-blur-sm">
               <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
-                <div className="flex items-end gap-1 rounded-2xl bg-white border border-stone-200 shadow-[0_0_0_1px_rgba(0,0,0,0.04),0_2px_4px_rgba(0,0,0,0.04)] p-2 focus-within:border-emerald-300 focus-within:shadow-[0_0_0_1px_rgba(5,150,105,0.15),0_2px_6px_rgba(0,0,0,0.06)] transition-all">
+                <div className="flex flex-col rounded-2xl bg-white border border-stone-200 shadow-[0_0_0_1px_rgba(0,0,0,0.04),0_2px_4px_rgba(0,0,0,0.04)] focus-within:border-emerald-300 focus-within:shadow-[0_0_0_1px_rgba(5,150,105,0.15),0_2px_6px_rgba(0,0,0,0.06)] transition-all">
                   <Textarea
                     ref={textareaRef}
                     value={inputText}
@@ -520,27 +522,29 @@ export default function ChatPage() {
                     }}
                     placeholder="输入或语音...（Shift+Enter 换行）"
                     disabled={isLoading || speechStatus === "recording" || speechStatus === "processing"}
-                    className="flex-1 border-0 min-h-[44px] sm:min-h-[52px] max-h-[120px] py-3 px-4 text-base sm:text-[15px] focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-500 resize-none overflow-hidden"
+                    className="w-full border-0 min-h-[44px] sm:min-h-[52px] max-h-[120px] py-3 px-4 text-base sm:text-[15px] focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-500 resize-none overflow-hidden bg-transparent"
                     rows={1}
                   />
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    onClick={handleVoiceToggle}
-                    disabled={isLoading || speechStatus === "processing"}
-                    className="shrink-0 h-10 w-10 sm:h-9 sm:w-9 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 touch-manipulation"
-                  >
-                    {speechStatus === "recording" ? <StopCircle className="h-5 w-5 text-red-500" /> : <Mic className="h-5 w-5" />}
-                  </Button>
-                  <Button
-                    type="submit"
-                    size="icon"
-                    disabled={!inputText.trim() || isLoading}
-                    className="shrink-0 h-10 w-10 sm:h-9 sm:w-9 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 touch-manipulation"
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center justify-end gap-1.5 p-2 shrink-0">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      onClick={handleVoiceToggle}
+                      disabled={isLoading || speechStatus === "processing"}
+                      className="shrink-0 h-10 w-10 sm:h-9 sm:w-9 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 touch-manipulation"
+                    >
+                      {speechStatus === "recording" ? <StopCircle className="h-5 w-5 text-red-500" /> : <Mic className="h-5 w-5" />}
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="icon"
+                      disabled={!inputText.trim() || isLoading}
+                      className="shrink-0 h-10 w-10 sm:h-9 sm:w-9 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 touch-manipulation"
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </form>
             </div>

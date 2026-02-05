@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { hasVersionPage } from "@/lib/classics"
+import { hasVersionPage, getBook } from "@/lib/classics"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import OlarkChat from '@/components/ui/OlarkChat'
@@ -58,11 +58,40 @@ const pastelCards = [
   { bg: "bg-cyan-100", border: "border-cyan-200", ring: "focus:ring-cyan-300", avatar: "bg-cyan-200 text-cyan-700" },
 ]
 
+// 底部区域书籍封面图片数组
+const bottomCoverImages = [
+  '/cover_book-1.jpg',
+  '/cover_book-2.jpg',
+  '/cover_book-3.jpg',
+  '/cover_book-4.jpg',
+  '/cover_book-5.jpg',
+]
+
+// 书籍名称到ID的映射
+const bookNameToId: Record<string, string> = {
+  '道德经': 'daodejing',
+  '金刚经': 'jingangjing',
+  '心经': 'xinjing',
+  '南华经': 'nanhuajing',
+  '冲虚真经': 'chongxuzhenjing',
+  '文始真经': 'wenshizhenjing',
+  '通玄真经': 'tongxuanzhenjing',
+  '黄庭经': 'huangtingjing',
+  '阴符经': 'yinfujing',
+  '清静经': 'qingjingjing',
+  '太上感应篇': 'taishangganyingpian',
+  '抱朴子': 'baopuzi',
+  '六祖坛经': 'liuzutanjing',
+  '孙子兵法': 'sunzibingfa',
+  '黄帝内经': 'huangdineijing',
+}
+
 export default function HomePage() {
   const router = useRouter()
   const [scenario, setScenario] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [comingSoonMessage, setComingSoonMessage] = useState<string | null>(null)
   const bottomStripRef = useRef<HTMLDivElement>(null)
   const [bottomStripPaused, setBottomStripPaused] = useState(false)
 
@@ -95,7 +124,7 @@ export default function HomePage() {
         const segmentWidth = el.scrollWidth / 2
         if (segmentWidth <= 0) return
         el.scrollLeft += step
-        if (el.scrollLeft >= segmentWidth) el.scrollLeft -= segmentWidth
+        if (el.scrollLeft >= segmentWidth - step) el.scrollLeft -= segmentWidth
       }, 30)
       return () => clearInterval(interval)
     }
@@ -106,6 +135,26 @@ export default function HomePage() {
   const handleReadClassic = (bookId: string) => {
     const startChapter = hasVersionPage(bookId) ? 0 : 1
     router.push(`/read/${bookId}/${startChapter}`)
+  }
+
+  // 处理书籍点击：检查是否有内容，有则跳转阅读页，无则显示提示
+  const handleBookClick = (bookName: string) => {
+    const bookId = bookNameToId[bookName]
+    if (!bookId) {
+      setComingSoonMessage(`${bookName} 内容正在制作中`)
+      setTimeout(() => setComingSoonMessage(null), 3000)
+      return
+    }
+    
+    const book = getBook(bookId)
+    if (book) {
+      // 有内容，跳转到阅读页
+      handleReadClassic(bookId)
+    } else {
+      // 无内容，显示提示
+      setComingSoonMessage(`${bookName} 内容正在制作中`)
+      setTimeout(() => setComingSoonMessage(null), 3000)
+    }
   }
 
   const handleStartScenario = async (override?: string) => {
@@ -172,6 +221,28 @@ export default function HomePage() {
           <Button variant="ghost" size="sm" onClick={() => setErrorMessage(null)}>关闭</Button>
         </div>
       )}
+      {comingSoonMessage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* 半透明背景遮罩 */}
+          <div 
+            className="absolute inset-0 bg-black/20 backdrop-blur-sm animate-[fadeIn_0.2s_ease-in-out_forwards]"
+            onClick={() => setComingSoonMessage(null)}
+          ></div>
+          {/* 浮窗内容 */}
+          <div className="relative bg-white border border-gray-200 text-gray-700 px-6 py-4 rounded-lg shadow-xl flex items-center gap-3 animate-[fadeIn_0.2s_ease-in-out_forwards]">
+            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+            <span className="text-sm font-medium">{comingSoonMessage}</span>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setComingSoonMessage(null)}
+              className="h-6 w-6 p-0 hover:bg-gray-100 rounded"
+            >
+              ×
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 flex flex-col min-h-0 bg-white overflow-y-auto overflow-x-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {/* 主内容 + 底部横条（主内容块拉满剩余高度，主行内容靠底） */}
@@ -188,9 +259,12 @@ export default function HomePage() {
                   type="button"
                   onClick={() => handleReadClassic('daodejing')}
                   disabled={isLoading}
-                  className={`relative flex flex-col gap-3 md:gap-4 shrink-0 w-[200px] h-[320px] md:w-[260px] md:h-[420px] rounded-r-lg md:rounded-r-xl ${p.bg} border-t-2 border-r-2 border-b-2 border-gray-300 hover:shadow-2xl hover:scale-[1.02] focus:outline-none focus:ring-2 ${p.ring} focus:ring-offset-2 disabled:opacity-60 transition-all py-6 px-5 md:py-8 md:px-7 text-left touch-manipulation overflow-hidden`}
+                  className="relative flex items-center justify-center shrink-0 w-[200px] h-[320px] md:w-[260px] md:h-[420px] rounded-r-lg md:rounded-r-xl border-t-2 border-r-2 border-b-2 border-gray-300 hover:shadow-2xl hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 disabled:opacity-60 transition-all touch-manipulation overflow-hidden"
                   aria-label={`读${s.label}`}
                   style={{
+                    backgroundImage: "url('/cover_daodejing.jpg')",
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
                     boxShadow: '12px 8px 20px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.08), inset -2px 0 8px rgba(0,0,0,0.1)',
                   }}
                 >
@@ -202,24 +276,19 @@ export default function HomePage() {
                   {/* 封面装饰边框 */}
                   <div className="absolute inset-2 md:inset-3 border border-gray-400/30 rounded-lg pointer-events-none"></div>
                   
-                  {/* 内容区域 */}
-                  <div className="flex flex-col items-center gap-3 md:gap-4 relative z-10 pt-2">
-                    {/* 标题区域 - 古籍风格 */}
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-12 md:w-16 h-0.5 bg-gradient-to-r from-transparent via-gray-400 to-transparent"></div>
-                      <span className="text-xl md:text-3xl font-bold text-gray-900 text-center tracking-wide" style={{ fontFamily: 'serif' }}>{s.label}</span>
-                      <div className="w-12 md:w-16 h-0.5 bg-gradient-to-r from-transparent via-gray-400 to-transparent"></div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex-1 flex flex-col justify-center relative z-10 px-2">
-                    <p className="text-sm md:text-base text-gray-700 leading-relaxed text-center line-clamp-4" style={{ fontFamily: 'serif' }}>{s.intro}</p>
-                  </div>
-                  
-                  {/* 底部装饰 */}
-                  <div className="relative z-10 flex flex-col items-center gap-2">
-                    <div className="w-20 md:w-24 h-0.5 bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
-                    <span className="text-xs md:text-sm font-medium text-blue-700 text-center tracking-wide">开始读经 →</span>
+                  {/* 书名竖排居中 */}
+                  <div className="relative z-10 flex items-center justify-center">
+                    <span 
+                      className="text-2xl md:text-4xl font-bold text-gray-900 tracking-wider"
+                      style={{ 
+                        fontFamily: 'serif',
+                        writingMode: 'vertical-rl',
+                        textOrientation: 'upright',
+                        letterSpacing: '0.2em'
+                      }}
+                    >
+                      {s.label}
+                    </span>
                   </div>
                 </button>
               )
@@ -238,7 +307,7 @@ export default function HomePage() {
            
               <div className="flex items-center justify-center gap-2 mt-1">
                 <div className="h-px w-8 md:w-12 bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
-                <p className="text-sm md:text-base text-gray-600 font-medium tracking-wide">经鱼·心随经转，AI让你成为自己的老师，与你读经，读懂自己</p>
+                <p className="text-sm md:text-base text-gray-600 font-medium tracking-wide">AI让你成为自己的老师，与你读经，读懂自己</p>
                 <div className="h-px w-8 md:w-12 bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
               </div>
             </div>
@@ -286,11 +355,14 @@ export default function HomePage() {
                 <button
                   key={s.label}
                   type="button"
-                  onClick={() => handleStartScenario(s.value)}
+                  onClick={() => handleBookClick(s.label)}
                   disabled={isLoading}
-                  className={`relative flex flex-col gap-3 md:gap-4 shrink-0 w-[200px] h-[320px] md:w-[260px] md:h-[420px] rounded-l-lg md:rounded-l-xl ${p.bg} border-t-2 border-l-2 border-b-2 border-gray-300 hover:shadow-2xl hover:scale-[1.02] focus:outline-none focus:ring-2 ${p.ring} focus:ring-offset-2 disabled:opacity-60 transition-all py-6 px-5 md:py-8 md:px-7 text-left touch-manipulation overflow-hidden`}
+                  className="relative flex items-center justify-center shrink-0 w-[200px] h-[320px] md:w-[260px] md:h-[420px] rounded-l-lg md:rounded-l-xl border-t-2 border-l-2 border-b-2 border-gray-300 hover:shadow-2xl hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 disabled:opacity-60 transition-all touch-manipulation overflow-hidden"
                   aria-label={`读${s.label}`}
                   style={{
+                    backgroundImage: "url('/cover_jingangjing.jpg')",
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
                     boxShadow: '-12px 8px 20px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.08), inset 2px 0 8px rgba(0,0,0,0.1)',
                   }}
                 >
@@ -302,24 +374,19 @@ export default function HomePage() {
                   {/* 封面装饰边框 */}
                   <div className="absolute inset-2 md:inset-3 border border-gray-400/30 rounded-lg pointer-events-none"></div>
                   
-                  {/* 内容区域 */}
-                  <div className="flex flex-col items-center gap-3 md:gap-4 relative z-10 pt-2">
-                    {/* 标题区域 - 古籍风格 */}
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-12 md:w-16 h-0.5 bg-gradient-to-r from-transparent via-gray-400 to-transparent"></div>
-                      <span className="text-xl md:text-3xl font-bold text-gray-900 text-center tracking-wide" style={{ fontFamily: 'serif' }}>{s.label}</span>
-                      <div className="w-12 md:w-16 h-0.5 bg-gradient-to-r from-transparent via-gray-400 to-transparent"></div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex-1 flex flex-col justify-center relative z-10 px-2">
-                    <p className="text-sm md:text-base text-gray-700 leading-relaxed text-center line-clamp-4" style={{ fontFamily: 'serif' }}>{s.intro}</p>
-                  </div>
-                  
-                  {/* 底部装饰 */}
-                  <div className="relative z-10 flex flex-col items-center gap-2">
-                    <div className="w-20 md:w-24 h-0.5 bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
-                    <span className="text-xs md:text-sm font-medium text-blue-700 text-center tracking-wide">开始读经 →</span>
+                  {/* 书名竖排居中 */}
+                  <div className="relative z-10 flex items-center justify-center">
+                    <span 
+                      className="text-2xl md:text-4xl font-bold text-gray-900 tracking-wider"
+                      style={{ 
+                        fontFamily: 'serif',
+                        writingMode: 'vertical-rl',
+                        textOrientation: 'upright',
+                        letterSpacing: '0.2em'
+                      }}
+                    >
+                      {s.label}
+                    </span>
                   </div>
                 </button>
               )
@@ -337,37 +404,49 @@ export default function HomePage() {
           >
             <div className="flex gap-2 md:gap-4 min-w-max justify-center py-1">
               {[...bottomClassics, ...bottomClassics].map((s, i) => {
-                const p = pastelCards[i % pastelCards.length]
+                // 基于书籍在原始数组中的索引选择样式和封面，确保重复时使用相同样式
+                const originalIndex = i % bottomClassics.length
+                const p = pastelCards[originalIndex % pastelCards.length]
+                const coverImage = bottomCoverImages[originalIndex % bottomCoverImages.length]
                 return (
                   <button
                     key={`${s.label}-${i}`}
                     type="button"
-                    onClick={() => handleStartScenario(s.value)}
+                    onClick={() => handleBookClick(s.label)}
                     disabled={isLoading}
-                    className={`relative flex flex-col gap-1 md:gap-1.5 shrink-0 w-24 md:w-32 h-32 md:h-40 rounded-r-sm md:rounded-r-md ${p.bg} border-t border-r border-b border-gray-300 hover:shadow-xl hover:scale-[1.05] focus:outline-none focus:ring-2 ${p.ring} focus:ring-offset-2 disabled:opacity-60 transition-all py-2 px-2 md:py-3 md:px-3 text-center touch-manipulation overflow-hidden`}
+                    className={`relative flex items-center justify-center shrink-0 w-24 md:w-32 h-32 md:h-40 rounded-r-sm md:rounded-r-md border-t border-r border-b border-gray-300 hover:shadow-xl hover:scale-[1.05] focus:outline-none focus:ring-2 ${p.ring} focus:ring-offset-2 disabled:opacity-60 transition-transform touch-manipulation overflow-hidden`}
                     aria-label={`读${s.label}`}
                     style={{
+                      backgroundImage: `url('${coverImage}')`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
                       boxShadow: '6px 4px 12px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.08), inset -1px 0 4px rgba(0,0,0,0.1)',
                     }}
                   >
+                    {/* 半透明背景色层，用于区分不同书籍 */}
+                    <div className={`absolute inset-0 ${p.bg} opacity-60 rounded-r-sm md:rounded-r-md pointer-events-none`}></div>
+                    
                     {/* 书脊 */}
-                    <div className="absolute left-0 top-0 bottom-0 w-2 bg-gradient-to-b from-gray-600 via-gray-500 to-gray-600 rounded-l-sm shadow-inner">
+                    <div className="absolute left-0 top-0 bottom-0 w-2 bg-gradient-to-b from-gray-600 via-gray-500 to-gray-600 rounded-l-sm shadow-inner z-10">
                       <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gradient-to-b from-white/20 via-transparent to-white/20"></div>
                     </div>
                     
                     {/* 封面装饰边框 */}
-                    <div className="absolute inset-1 border border-gray-400/30 rounded-sm pointer-events-none"></div>
+                    <div className="absolute inset-1 border border-gray-400/30 rounded-sm pointer-events-none z-10"></div>
                     
-                    {/* 内容 */}
-                    <div className="flex flex-col items-center gap-1 relative z-10 pt-1">
-                      <div className="w-8 md:w-10 h-0.5 bg-gradient-to-r from-transparent via-gray-400 to-transparent"></div>
-                      <span className="text-[11px] md:text-xs font-bold text-gray-900 leading-tight relative z-10" style={{ fontFamily: 'serif' }}>{s.label}</span>
-                      <div className="w-8 md:w-10 h-0.5 bg-gradient-to-r from-transparent via-gray-400 to-transparent"></div>
-                    </div>
-                    <span className="text-[10px] md:text-[11px] text-gray-700 leading-tight line-clamp-2 relative z-10 px-1" style={{ fontFamily: 'serif' }}>{s.intro}</span>
-                    <div className="mt-auto relative z-10">
-                      <div className="w-12 md:w-14 h-0.5 bg-gradient-to-r from-transparent via-gray-300 to-transparent mb-1"></div>
-                      <span className="text-[10px] md:text-[11px] font-medium text-blue-700 text-center block">开始读经 →</span>
+                    {/* 书名竖排居中 */}
+                    <div className="relative z-20 flex items-center justify-center">
+                      <span 
+                        className="text-sm md:text-base font-bold text-gray-900 tracking-wider drop-shadow-sm"
+                        style={{ 
+                          fontFamily: 'serif',
+                          writingMode: 'vertical-rl',
+                          textOrientation: 'upright',
+                          letterSpacing: '0.1em'
+                        }}
+                      >
+                        {s.label}
+                      </span>
                     </div>
                   </button>
                 )

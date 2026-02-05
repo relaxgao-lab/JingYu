@@ -130,10 +130,26 @@
 .read-content {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "kern" 1;
+  font-kerning: normal;
 }
 
 .read-body {
   hyphens: none;
   -webkit-hyphens: none;
   -ms-hyphens: none;
+  word-spacing: 0.05em;
+  letter-spacing: 0.01em;
+}
+
+.read-body p {
+  orphans: 3;
+  widows: 3;
+}
+
+/* 优化中文排版 - 保持组件中设置的对齐方式 */
+.read-body p {
+  text-indent: 0;
+  margin: 0;
 }
