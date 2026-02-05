@@ -145,13 +145,11 @@ export default function HomePage() {
       setTimeout(() => setComingSoonMessage(null), 3000)
       return
     }
-    
+
     const book = getBook(bookId)
     if (book) {
-      // 有内容，跳转到阅读页
       handleReadClassic(bookId)
     } else {
-      // 无内容，显示提示
       setComingSoonMessage(`${bookName} 内容正在制作中`)
       setTimeout(() => setComingSoonMessage(null), 3000)
     }

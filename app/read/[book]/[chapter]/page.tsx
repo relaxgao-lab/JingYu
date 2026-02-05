@@ -23,7 +23,6 @@ interface SceneMeta {
   scenario: string
 }
 
-
 export default function ReadPage() {
   const router = useRouter()
   const params = useParams()
@@ -88,6 +87,12 @@ export default function ReadPage() {
 
   const [contentTransitioning, setContentTransitioning] = useState(false)
   const contentScrollRef = useRef<HTMLDivElement>(null)
+  const [pageEntered, setPageEntered] = useState(false)
+  useEffect(() => {
+    const t = requestAnimationFrame(() => setPageEntered(true))
+    return () => cancelAnimationFrame(t)
+  }, [])
+
   useEffect(() => {
     if (!bookId || chapterParam === undefined || chapterParam === '') {
       router.push('/')
@@ -373,7 +378,10 @@ export default function ReadPage() {
   const showContent = !loading && (chapter || isVersionPage)
 
   return (
-    <div className="h-screen flex flex-col bg-stone-50/60">
+    <div
+      className={`h-screen flex flex-col bg-stone-50/60 transition-opacity duration-300 ease-out ${pageEntered ? "opacity-100" : "opacity-0"}`}
+      aria-busy={!pageEntered}
+    >
       {/* 主要内容区域 - 左右分栏，右侧宽度可拖拽 */}
       <div className="flex-1 flex overflow-hidden">
         {/* 左侧：章节内容（宽度与聊天窗口同步过渡，拖拽时无动画） */}
