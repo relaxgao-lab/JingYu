@@ -1,10 +1,11 @@
 "use client"
 
-import React, { useState, useEffect, useRef, useCallback } from "react"
+import React, { useState, useEffect, useLayoutEffect, useRef } from "react"
+import Image from "next/image"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { ChevronLeft, ChevronRight, List, Mic, Send, StopCircle, Volume2, VolumeX } from "lucide-react"
+import { ChevronLeft, ChevronRight, List, Mic, MessageSquare, Send, StopCircle, Volume2, VolumeX, X } from "lucide-react"
 import { getChapter, getChapters, getTotalChapters, getNextChapter, getPrevChapter, hasChapter, hasVersionPage, getBook } from "@/lib/classics"
 import { whisperSpeechService, type SpeechStatus } from "@/app/conversation/whisper-speech-service"
 import { TTS_PROVIDER } from "@/config"
@@ -69,6 +70,22 @@ export default function ReadPage() {
   const resizeStartWidth = useRef(0)
   const lastChatWidthRef = useRef(chatWidth)
   const [showToc, setShowToc] = useState(false)
+  // 默认打开；若有已保存的偏好则从 localStorage 恢复
+  const [isChatOpen, setIsChatOpen] = useState(true)
+
+  useLayoutEffect(() => {
+    try {
+      const saved = localStorage.getItem("read-chat-open")
+      if (saved !== null) setIsChatOpen(saved === "true")
+    } catch {
+      // 保持默认打开
+    }
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem("read-chat-open", isChatOpen.toString())
+  }, [isChatOpen])
+
   const [contentTransitioning, setContentTransitioning] = useState(false)
   const contentScrollRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -98,254 +115,205 @@ export default function ReadPage() {
       contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" })
       if (book?.versionNote) {
         setSceneMeta({
-          aiRole: book.author || "经典解读助手",
-          userRole: "学生",
-          context: `你正在阅读《${book.book}》的版本说明。内容如下：\n\n${book.versionNote}\n\n请基于以上版本说明，用现代人容易听懂的白话文帮助学生理解该版本的选取理由和相关背景。`,
-          scenario: `${book.book} - 版本说明`
+          aiRole: "解读助手",
+          userRole: "读者",
+          context: `正在阅读《${bookId}》的版本说明`,
+          scenario: "读者对书籍的版本和背景感兴趣"
         })
-      } else {
-        setSceneMeta(null)
       }
-      setMessages([])
-      return
-    }
-
-    const chapterData = getChapter(bookId, num)
-    if (!chapterData) {
-      router.push('/')
-      return
-    }
-
-    setCurrentChapterNum(num)
-    setChapter(chapterData)
-    setTotalChapters(total)
-    setLoading(false)
-    contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" })
-    if (book && chapterData) {
-      setSceneMeta({
-        aiRole: book.author || "经典解读助手",
-        userRole: "学生",
-        context: `你正在阅读《${book.book}》的${chapterData.title}。本章内容如下：\n\n${chapterData.content}\n\n请基于本章内容，用现代人容易听懂的白话文帮助学生理解经典的含义和智慧。回复时请用「你」直接对读者讲解，用第二人称。若原文有对比或递进（如无欲/有欲、妙/徼），请明确区分二者含义与层次，避免把两种状态说成并列、等同；例如「常无欲以观其妙，常有欲以观其徼」中，无欲才能观其妙，有欲时只能观其徼（边界），二者不是并列的两种观察方式。`,
-        scenario: `${book.book} - ${chapterData.title}`
-      })
-      setMessages([])
+    } else {
+      const ch = getChapter(bookId, num)
+      if (ch) {
+        setChapter(ch)
+        setCurrentChapterNum(num)
+        setTotalChapters(total)
+        setLoading(false)
+        contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" })
+        setSceneMeta({
+          aiRole: "解读助手",
+          userRole: "读者",
+          context: `正在阅读《${bookId}》第${ch.chapter}章：${ch.title}`,
+          scenario: "读者对当前章节内容有疑问或想深入了解"
+        })
+      }
     }
   }, [bookId, chapterParam, router])
 
-  // 自动调整 textarea 高度
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`
-    }
-  }, [inputText])
-
   // 消息滚动到底部
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
-    }
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  // 语音服务配置
+  // 处理语音输入回调
   useEffect(() => {
-    whisperSpeechService.updateConfig({
-      ttsProvider: TTS_PROVIDER,
-      onStatusChange: (s) => setSpeechStatus(s),
-      onError: (err) => {
-        if (userStoppedPlaybackRef.current) {
-          userStoppedPlaybackRef.current = false
-          setSpeechError(null)
-          setSpeechStatus("idle")
-          return
-        }
-        setSpeechError(err)
-        setSpeechStatus("idle")
-      },
-      onTranscript: (text) => {
-        if (transcriptCallback.current) transcriptCallback.current(text)
-      },
-    })
-    return () => whisperSpeechService.resetConfig?.()
+    transcriptCallback.current = (text: string) => {
+      setInputText(prev => prev + text)
+      if (textareaRef.current) {
+        textareaRef.current.focus()
+      }
+    }
   }, [])
 
-  // 拖拽调整 AI 窗口宽度
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    setIsResizing(true)
-    resizeStartX.current = e.clientX
-    resizeStartWidth.current = chatWidth
-  }, [chatWidth])
-
-  useEffect(() => {
-    if (!isResizing) return
-    const maxW = typeof window !== "undefined" ? window.innerWidth * (MAX_CHAT_WIDTH_PERCENT / 100) : 800
-    const onMove = (e: MouseEvent) => {
-      const delta = resizeStartX.current - e.clientX // 往左拖 = 正 = 变宽
-      let next = resizeStartWidth.current + delta
-      next = Math.max(MIN_CHAT_WIDTH, Math.min(maxW, next))
-      lastChatWidthRef.current = next
-      setChatWidth(next)
+  const handleGoHome = () => router.push("/")
+  
+  const handleGoToChapter = (num: number) => {
+    if (num === currentChapterNum) {
+      setShowToc(false)
+      return
     }
-    const onUp = () => {
-      setIsResizing(false)
-      try {
-        localStorage.setItem("read-chat-width", String(lastChatWidthRef.current))
-      } catch {}
-    }
-    document.addEventListener("mousemove", onMove)
-    document.addEventListener("mouseup", onUp)
-    document.body.style.cursor = "col-resize"
-    document.body.style.userSelect = "none"
-    return () => {
-      document.removeEventListener("mousemove", onMove)
-      document.removeEventListener("mouseup", onUp)
-      document.body.style.cursor = ""
-      document.body.style.userSelect = ""
-    }
-  }, [isResizing, chatWidth])
-
-
-  // 切换章节：仅更新状态和 URL，不触发 router 导航；内容区带淡入淡出渐变
-  const switchToChapter = useCallback((num: number) => {
     setContentTransitioning(true)
     setTimeout(() => {
-      setCurrentChapterNum(num)
-      const total = getTotalChapters(bookId)
-      const book = getBook(bookId)
-      const isVersionPage = num === 0 && hasVersionPage(bookId)
-
-      if (isVersionPage) {
-        setChapter(null)
-        setTotalChapters(total)
-        setLoading(false)
-        if (book?.versionNote) {
-          setSceneMeta({
-            aiRole: book.author || "经典解读助手",
-            userRole: "学生",
-            context: `你正在阅读《${book.book}》的版本说明。内容如下：\n\n${book.versionNote}\n\n请基于以上版本说明，用现代人容易听懂的白话文帮助学生理解该版本的选取理由和相关背景。`,
-            scenario: `${book.book} - 版本说明`
-          })
-        } else setSceneMeta(null)
-        setMessages([])
-      } else {
-        const chapterData = getChapter(bookId, num)
-        if (!chapterData) {
-          setContentTransitioning(false)
-          return
-        }
-        setChapter(chapterData)
-        setTotalChapters(total)
-        setLoading(false)
-        if (book && chapterData) {
-          setSceneMeta({
-            aiRole: book.author || "经典解读助手",
-            userRole: "学生",
-            context: `你正在阅读《${book.book}》的${chapterData.title}。本章内容如下：\n\n${chapterData.content}\n\n请基于本章内容，用现代人容易听懂的白话文帮助学生理解经典的含义和智慧。回复时请用「你」直接对读者讲解，用第二人称。若原文有对比或递进（如无欲/有欲、妙/徼），请明确区分二者含义与层次，避免把两种状态说成并列、等同；例如「常无欲以观其妙，常有欲以观其徼」中，无欲才能观其妙，有欲时只能观其徼（边界），二者不是并列的两种观察方式。`,
-            scenario: `${book.book} - ${chapterData.title}`
-          })
-        }
-        setMessages([])
-      }
-      contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      if (typeof window !== "undefined") {
-        window.history.replaceState(null, "", `/read/${bookId}/${num}`)
-      }
+      setShowToc(false)
+      router.push(`/read/${bookId}/${num}`)
       setContentTransitioning(false)
-    }, 180)
-  }, [bookId])
-
-  const handleGoToChapter = (ch: number) => {
-    setShowToc(false)
-    switchToChapter(ch)
+    }, 200)
   }
 
   const handlePrevChapter = () => {
     const prev = getPrevChapter(bookId, currentChapterNum)
-    if (prev != null) switchToChapter(prev)
+    if (prev !== null) {
+      handleGoToChapter(prev)
+    }
   }
 
   const handleNextChapter = () => {
     const next = getNextChapter(bookId, currentChapterNum)
-    if (next != null) switchToChapter(next)
+    if (next !== null) {
+      handleGoToChapter(next)
+    }
   }
 
-  const handleGoHome = () => {
-    router.push('/')
-  }
+  const sendMessage = async (text: string) => {
+    if (!text.trim() || isLoadingChat || !sceneMeta) return
 
-  const sendMessage = useCallback(async (text: string) => {
-    if (!text.trim() || !sceneMeta) return
+    const userMsg: Message = { role: "user", content: text }
+    setMessages(prev => [...prev, userMsg])
+    setInputText("")
     setIsLoadingChat(true)
     setSpeechError(null)
-    const newUserMsg: Message = { role: "user", content: text }
-    setMessages((prev) => [...prev, newUserMsg])
-    setInputText("")
+    userStoppedPlaybackRef.current = false
 
     try {
-      const resp = await fetch("/api/chat", {
+      const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [...messages, newUserMsg],
-          sceneMeta,
-        }),
-      })
-      const data = await resp.json()
-      if (!resp.ok) throw new Error(data.error || "API error")
-      const aiMsg: Message = { role: "assistant", content: data.content || "(No response)" }
-      setMessages((prev) => [...prev, aiMsg])
-      setIsLoadingChat(false)
-
-      // PC 端自动播放 AI 回复语音（不 await，播放在后台进行，避免播放期间仍显示「正在思考」）
-      const isMobileUA = typeof navigator !== "undefined" &&
-        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-      const speakMatch = data.content?.match(/\[SPEAK\]([\s\S]*?)\[\/SPEAK\]/)
-      if (!isMobileUA && isSpeechEnabledRef.current && speakMatch?.[1]) {
-        whisperSpeechService.speak(speakMatch[1].trim()).catch((speakErr: unknown) => {
-          console.warn("Speech playback failed:", speakErr)
+          messages: [...messages, userMsg],
+          sceneMeta: {
+            ...sceneMeta,
+            context: `${sceneMeta.context}\n当前章节内容：\n${chapter?.content || ""}`
+          }
         })
+      })
+
+      if (!response.ok) throw new Error("对话请求失败")
+      
+      const data = await response.json()
+      const assistantMsg: Message = { role: "assistant", content: data.content }
+      setMessages(prev => [...prev, assistantMsg])
+
+      // 如果开启了语音，自动朗读
+      if (isSpeechEnabledRef.current) {
+        const speakText = extractSpeakContent(data.content)
+        if (speakText) {
+          try {
+            await whisperSpeechService.speak(speakText)
+          } catch (err) {
+            console.error("TTS Error:", err)
+            setSpeechError("语音播放失败")
+          }
+        }
       }
-    } catch (err: unknown) {
-      console.error("Chat error:", err)
+    } catch (error) {
+      console.error("Chat Error:", error)
+      setSpeechError("对话请求失败，请稍后再试")
     } finally {
       setIsLoadingChat(false)
-      if (speechStatus !== "speaking") setSpeechStatus("idle")
     }
-  }, [messages, sceneMeta])
-
-  const handleVoiceToggle = async () => {
-    if (speechStatus === "recording") {
-      await whisperSpeechService.stopListening()
-      return
-    }
-    setSpeechError(null)
-    transcriptCallback.current = (text: string) => {
-      if (text?.trim()) {
-        setInputText(text)
-        sendMessage(text)
-      }
-    }
-    await whisperSpeechService.startListening()
   }
 
-  const handleSubmit = (e?: React.FormEvent) => {
-    e?.preventDefault()
-    if (!inputText.trim() || isLoadingChat) return
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
     sendMessage(inputText)
   }
 
+  const handleVoiceToggle = async () => {
+    if (speechStatus === "recording") {
+      whisperSpeechService.stopListening()
+      setSpeechStatus("idle")
+      return
+    }
+
+    setSpeechError(null)
+    setSpeechStatus("recording")
+    try {
+      whisperSpeechService.updateConfig({
+        onTranscript: (text: string) => {
+          transcriptCallback.current?.(text)
+        },
+        onError: (err: string) => {
+          console.error("Recording Error:", err)
+          setSpeechError(err || "语音识别失败")
+          setSpeechStatus("idle")
+        },
+        onStatusChange: (s: SpeechStatus) => {
+          setSpeechStatus(s)
+        }
+      })
+      await whisperSpeechService.startListening()
+    } catch (err) {
+      setSpeechStatus("idle")
+      setSpeechError("无法启动录音")
+    }
+  }
+
+  // 拖拽调整宽度
+  const handleResizeStart = (e: React.MouseEvent) => {
+    setIsResizing(true)
+    resizeStartX.current = e.clientX
+    resizeStartWidth.current = chatWidth
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
+  }
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return
+      const deltaX = resizeStartX.current - e.clientX
+      const newWidth = Math.max(MIN_CHAT_WIDTH, Math.min(resizeStartWidth.current + deltaX, window.innerWidth * (MAX_CHAT_WIDTH_PERCENT / 100)))
+      setChatWidth(newWidth)
+      lastChatWidthRef.current = newWidth
+    }
+
+    const handleMouseUp = () => {
+      if (!isResizing) return
+      setIsResizing(false)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+      localStorage.setItem("read-chat-width", lastChatWidthRef.current.toString())
+    }
+
+    if (isResizing) {
+      window.addEventListener("mousemove", handleMouseMove)
+      window.addEventListener("mouseup", handleMouseUp)
+    }
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove)
+      window.removeEventListener("mouseup", handleMouseUp)
+    }
+  }, [isResizing])
+
+  // 提取 [SPEAK] 标签内容
   const extractSpeakContent = (content: string) => {
-    if (!content) return content
+    if (!content) return ''
     
-    // 检查内容是否完全被 [SPEAK]...[/SPEAK] 包裹
-    const fullMatch = content.match(/^\s*\[\s*SPEAK\s*\]([\s\S]*?)\[\s*\/\s*SPEAK\s*\]\s*$/i)
-    if (fullMatch && fullMatch[1]) {
-      // 如果完全被包裹，只返回标签内的内容
+    // 检查是否整个内容都被 [SPEAK] 标签包裹
+    const fullMatch = content.match(/^\[\s*SPEAK\s*\]([\s\S]*?)\[\s*\/\s*SPEAK\s*\]$/i)
+    if (fullMatch) {
       return fullMatch[1].trim()
     }
-    
-    // 否则，移除所有 [SPEAK]...[/SPEAK] 标签对（包括带空格的变体）
+
+    // 如果不是整体包裹，则移除所有 [SPEAK] 标签及其内容
     let cleaned = content.replace(/\[\s*SPEAK\s*\][\s\S]*?\[\s*\/\s*SPEAK\s*\]/gi, '')
     
     // 移除残留的单独标签
@@ -408,8 +376,14 @@ export default function ReadPage() {
     <div className="h-screen flex flex-col bg-stone-50/60">
       {/* 主要内容区域 - 左右分栏，右侧宽度可拖拽 */}
       <div className="flex-1 flex overflow-hidden">
-        {/* 左侧：章节内容 */}
-        <div className="flex-1 min-w-0 flex flex-col overflow-hidden border-r border-gray-200 bg-white relative">
+        {/* 左侧：章节内容（宽度与聊天窗口同步过渡，拖拽时无动画） */}
+        <div
+          className="shrink-0 min-w-0 flex flex-col overflow-hidden border-r border-gray-200 bg-white relative"
+          style={{
+            width: isChatOpen ? `calc(100% - ${chatWidth}px - 6px)` : "100%",
+            transition: isResizing ? "none" : "width 0.55s cubic-bezier(0.25, 0.1, 0.25, 1)",
+          }}
+        >
           {/* 页面内导航：返回首页、标题、目录（章节信息在页脚） */}
           <div className="sticky top-0 z-10 max-w-[44rem] mx-auto w-full px-6 md:px-12 py-2 bg-white/95 backdrop-blur-sm border-b border-gray-200 shrink-0">
             <div className="flex items-center justify-between gap-3">
@@ -577,204 +551,250 @@ export default function ReadPage() {
           </div>
         </div>
 
-        {/* 拖拽条 */}
+        {/* 拖拽条（带顺滑过渡） */}
         <div
           role="separator"
           aria-label="调整 AI 窗口宽度"
           onMouseDown={handleResizeStart}
-          className={`shrink-0 w-1.5 flex flex-col items-center justify-center bg-gray-200 hover:bg-emerald-400 active:bg-emerald-500 cursor-col-resize select-none transition-colors ${
+          className={`shrink-0 flex flex-col items-center justify-center bg-gray-200 hover:bg-emerald-400 active:bg-emerald-500 cursor-col-resize select-none overflow-hidden ${
             isResizing ? "bg-emerald-500" : ""
-          }`}
+          } ${isChatOpen ? "w-1.5" : "w-0 pointer-events-none"}`}
+          style={{ transition: isResizing ? "none" : "width 0.55s cubic-bezier(0.25, 0.1, 0.25, 1)" }}
         >
-          <div className="w-0.5 h-8 rounded-full bg-gray-400 group-hover:bg-white pointer-events-none" />
+          <div className="w-0.5 h-8 rounded-full bg-gray-400 group-hover:bg-white pointer-events-none shrink-0" />
         </div>
 
-        {/* 右侧：AI 聊天窗口（宽度可拖拽） */}
+        {/* 右侧：AI 聊天窗口（translateX 滑入，更顺滑） */}
         <div
-          className="flex flex-col bg-white border-l border-gray-200 shrink-0"
-          style={{ width: chatWidth, minWidth: MIN_CHAT_WIDTH }}
+          className={`flex flex-col shrink-0 overflow-hidden ${!isChatOpen ? "pointer-events-none" : ""}`}
+          style={{
+            width: isChatOpen ? chatWidth : 0,
+            minWidth: isChatOpen ? MIN_CHAT_WIDTH : 0,
+            transition: isResizing ? "none" : "width 0.55s cubic-bezier(0.25, 0.1, 0.25, 1)",
+          }}
         >
-          {/* 聊天标题 */}
-          <div className="shrink-0 px-4 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-gray-700">AI 解读助手</h3>
-              <p className="text-xs text-gray-500 mt-0.5">基于当前章节内容提问</p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const next = !isSpeechEnabled
-                if (!next) {
-                  userStoppedPlaybackRef.current = true
-                  whisperSpeechService.stopSpeaking()
-                  setSpeechError(null)
-                }
-                setIsSpeechEnabled(next)
-              }}
-              className={`shrink-0 h-8 px-2 border ${voiceToggleColor.bg} ${voiceToggleColor.border} ${voiceToggleColor.text} ${voiceToggleColor.hover}`}
-              title={isSpeechEnabled ? "关闭语音朗读" : "开启语音朗读"}
-            >
-              {isSpeechEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-              <span className="ml-1 text-xs">{isSpeechEnabled ? "语音开" : "语音关"}</span>
-            </Button>
-          </div>
-
-          {/* 消息列表 */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.length === 0 && (
-              <div className="text-center text-sm text-gray-500 mt-8">
-                <p>有什么问题想了解吗？</p>
-                <p className="mt-2 text-xs">可以询问本章的含义、背景或相关智慧</p>
+          <div
+            className="flex flex-col flex-1 min-w-0 h-full bg-white border-l border-gray-200"
+            style={{
+              width: chatWidth,
+              minWidth: MIN_CHAT_WIDTH,
+              transform: isChatOpen ? "translateX(0)" : "translateX(100%)",
+              transition: isResizing ? "none" : "transform 0.55s cubic-bezier(0.25, 0.1, 0.25, 1)",
+            }}
+          >
+            {/* 聊天标题 */}
+            <div className="shrink-0 px-4 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-gray-700">AI 解读助手</h3>
+                <p className="text-xs text-gray-500 mt-0.5">基于当前章节内容提问</p>
               </div>
-            )}
-            {messages.map((msg, i) => (
-              <div
-                key={i}
-                className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
-              >
-                <div
-                  className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
-                    msg.role === "assistant"
-                      ? "bg-emerald-500 text-white"
-                      : "bg-violet-500 text-white"
-                  }`}
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const next = !isSpeechEnabled
+                    if (!next) {
+                      userStoppedPlaybackRef.current = true
+                      whisperSpeechService.stopSpeaking()
+                      setSpeechError(null)
+                    }
+                    setIsSpeechEnabled(next)
+                  }}
+                  className={`shrink-0 h-8 px-2 border ${voiceToggleColor.bg} ${voiceToggleColor.border} ${voiceToggleColor.text} ${voiceToggleColor.hover}`}
+                  title={isSpeechEnabled ? "关闭语音朗读" : "开启语音朗读"}
                 >
-                  {msg.role === "assistant" ? "AI" : "我"}
-                </div>
-                <div
-                  className={`flex-1 min-w-0 text-sm leading-relaxed ${
-                    msg.role === "user"
-                      ? "text-right"
-                      : "text-gray-800"
-                  }`}
+                  {isSpeechEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+                  <span className="ml-1 text-xs">{isSpeechEnabled ? "语音开" : "语音关"}</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsChatOpen(false)}
+                  className="h-8 w-8 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md"
+                  title="关闭聊天"
                 >
-                  {msg.role === "user" ? (
-                    <div className="inline-block max-w-[85%] rounded-2xl bg-violet-50 border border-violet-100 px-4 py-2 text-gray-900 text-left">
-                      {msg.content}
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="rounded-2xl bg-gray-50 border border-gray-100 px-4 py-2 whitespace-pre-wrap">
-                        {extractSpeakContent(msg.content)}
-                      </div>
-                      {i === messages.length - 1 && (
-                        <div className="min-h-[24px] flex items-center pt-1">
-                          {speechStatus === "speaking" ? (
-                            <div className="flex items-center gap-2 text-xs text-emerald-600">
-                              <span className="flex items-end gap-0.5 h-4 [&>span]:inline-block">
-                                <span className="w-1 bg-emerald-500 rounded-full origin-bottom animate-sound-wave animate-sound-wave-1 h-3" />
-                                <span className="w-1 bg-emerald-500 rounded-full origin-bottom animate-sound-wave animate-sound-wave-2 h-4" />
-                                <span className="w-1 bg-emerald-500 rounded-full origin-bottom animate-sound-wave animate-sound-wave-3 h-3" />
-                                <span className="w-1 bg-emerald-500 rounded-full origin-bottom animate-sound-wave animate-sound-wave-4 h-4" />
-                              </span>
-                              <Volume2 className="h-3.5 w-3.5 shrink-0 animate-status-pulse" />
-                              正在播放
-                            </div>
-                          ) : null}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-            {isLoadingChat && (
-              <div className="flex gap-3">
-                <div className="shrink-0 w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-medium text-white">
-                  AI
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="inline-block rounded-2xl bg-gray-50 border border-gray-100 px-4 py-2 text-sm text-gray-600">
-                    正在思考...
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* 默认快捷按钮 */}
-          <div className="shrink-0 px-4 py-2 border-t border-gray-100 bg-gray-50/80">
-            <div className="flex flex-wrap gap-2">
-              {presetPrompts.map((p, i) => {
-                const c = presetColors[i % presetColors.length]
-                return (
-                  <Button
-                    key={p.label}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!sceneMeta || isLoadingChat || speechStatus === "recording" || speechStatus === "processing"}
-                    onClick={() => handlePreset(p.text)}
-                    className={`text-xs h-8 px-3 rounded-full border ${c.bg} ${c.border} ${c.text} ${c.hover} disabled:opacity-50`}
-                  >
-                    {p.label}
-                  </Button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* 输入框 */}
-          <div className="shrink-0 border-t border-gray-200 p-4 bg-gray-50">
-            {speechError && (
-              <div className="mb-2 text-xs text-red-600 flex items-center justify-between gap-2">
-                <span>{speechError}</span>
-                <Button variant="ghost" size="sm" className="h-6 px-1 text-red-600" onClick={() => setSpeechError(null)}>
-                  关闭
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
-            )}
-            <form onSubmit={handleSubmit}>
-              <div className="flex flex-col rounded-lg border border-gray-300 bg-white shadow-sm focus-within:border-emerald-400 focus-within:ring-1 focus-within:ring-emerald-400/20 transition-all">
-                <Textarea
-                  ref={textareaRef}
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      if (inputText.trim() && !isLoadingChat && speechStatus !== "recording" && speechStatus !== "processing") {
-                        handleSubmit(e)
-                      }
-                    }
-                  }}
-                  placeholder="输入或语音...（Shift+Enter 换行）"
-                  disabled={isLoadingChat || !sceneMeta || speechStatus === "processing"}
-                  className="block w-full min-h-[44px] max-h-[120px] text-sm resize-none pt-2.5 px-3 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent placeholder:text-gray-400"
-                  rows={1}
-                />
-                <div className="flex items-center justify-end gap-1.5 p-1.5 shrink-0">
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    onClick={handleVoiceToggle}
-                    disabled={isLoadingChat || !sceneMeta || speechStatus === "processing"}
-                    className="h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md disabled:opacity-50 transition-colors"
-                    title={speechStatus === "recording" ? "停止录音" : "语音输入"}
+            </div>
+
+            {/* 消息列表 */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {messages.length === 0 && (
+                <div className="text-center text-sm text-gray-500 mt-8">
+                  <p>有什么问题想了解吗？</p>
+                  <p className="mt-2 text-xs">可以询问本章的含义、背景或相关智慧</p>
+                </div>
+              )}
+              {messages.map((msg, i) => (
+                <div
+                  key={i}
+                  className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
+                >
+                  <div
+                    className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
+                      msg.role === "assistant"
+                        ? "bg-emerald-500 text-white"
+                        : "bg-violet-500 text-white"
+                    }`}
                   >
-                    {speechStatus === "recording" ? (
-                      <StopCircle className="h-4 w-4 text-red-500" />
+                    {msg.role === "assistant" ? "AI" : "我"}
+                  </div>
+                  <div
+                    className={`flex-1 min-w-0 text-sm leading-relaxed ${
+                      msg.role === "user"
+                        ? "text-right"
+                        : "text-gray-800"
+                    }`}
+                  >
+                    {msg.role === "user" ? (
+                      <div className="inline-block max-w-[85%] rounded-2xl bg-violet-50 border border-violet-100 px-4 py-2 text-gray-900 text-left">
+                        {msg.content}
+                      </div>
                     ) : (
-                      <Mic className="h-4 w-4" />
+                      <div className="space-y-2">
+                        <div className="rounded-2xl bg-gray-50 border border-gray-100 px-4 py-2 whitespace-pre-wrap">
+                          {extractSpeakContent(msg.content)}
+                        </div>
+                        {i === messages.length - 1 && (
+                          <div className="min-h-[24px] flex items-center pt-1">
+                            {speechStatus === "speaking" ? (
+                              <div className="flex items-center gap-2 text-xs text-emerald-600">
+                                <span className="flex items-end gap-0.5 h-4 [&>span]:inline-block">
+                                  <span className="w-1 bg-emerald-500 rounded-full origin-bottom animate-sound-wave animate-sound-wave-1 h-3" />
+                                  <span className="w-1 bg-emerald-500 rounded-full origin-bottom animate-sound-wave animate-sound-wave-2 h-4" />
+                                  <span className="w-1 bg-emerald-500 rounded-full origin-bottom animate-sound-wave animate-sound-wave-3 h-3" />
+                                  <span className="w-1 bg-emerald-500 rounded-full origin-bottom animate-sound-wave animate-sound-wave-4 h-4" />
+                                </span>
+                                <Volume2 className="h-3.5 w-3.5 shrink-0 animate-status-pulse" />
+                                正在播放
+                              </div>
+                            ) : speechStatus === "processing" ? (
+                              <div className="flex items-center gap-2 text-xs text-amber-600">
+                                <div className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                                正在处理语音...
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
+                      </div>
                     )}
-                  </Button>
-                  <Button
-                    type="submit"
-                    size="icon"
-                    disabled={!inputText.trim() || isLoadingChat || !sceneMeta}
-                    className="h-8 w-8 bg-emerald-600 hover:bg-emerald-700 rounded-md disabled:opacity-50 transition-colors shadow-sm"
-                  >
-                    <Send className="h-4 w-4" />
+                  </div>
+                </div>
+              ))}
+              {isLoadingChat && (
+                <div className="flex gap-3">
+                  <div className="shrink-0 w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-medium text-white">
+                    AI
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="inline-block rounded-2xl bg-gray-50 border border-gray-100 px-4 py-2 text-sm text-gray-600">
+                      正在思考...
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* 默认快捷按钮 */}
+            <div className="shrink-0 px-4 py-2 border-t border-gray-100 bg-gray-50/80">
+              <div className="flex flex-wrap gap-2">
+                {presetPrompts.map((p, i) => {
+                  const c = presetColors[i % presetColors.length]
+                  return (
+                    <Button
+                      key={p.label}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!sceneMeta || isLoadingChat || speechStatus === "recording" || speechStatus === "processing"}
+                      onClick={() => handlePreset(p.text)}
+                      className={`text-xs h-8 px-3 rounded-full border ${c.bg} ${c.border} ${c.text} ${c.hover} disabled:opacity-50`}
+                    >
+                      {p.label}
+                    </Button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* 输入框 */}
+            <div className="shrink-0 border-t border-gray-200 p-4 bg-gray-50">
+              {speechError && (
+                <div className="mb-2 text-xs text-red-600 flex items-center justify-between gap-2">
+                  <span>{speechError}</span>
+                  <Button variant="ghost" size="sm" className="h-6 px-1 text-red-600" onClick={() => setSpeechError(null)}>
+                    关闭
                   </Button>
                 </div>
-              </div>
-            </form>
+              )}
+              <form onSubmit={handleSubmit}>
+                <div className="flex flex-col rounded-lg border border-gray-300 bg-white shadow-sm focus-within:border-emerald-400 focus-within:ring-1 focus-within:ring-emerald-400/20 transition-all">
+                  <Textarea
+                    ref={textareaRef}
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        if (inputText.trim() && !isLoadingChat && speechStatus !== "recording" && speechStatus !== "processing") {
+                          handleSubmit(e)
+                        }
+                      }
+                    }}
+                    placeholder="输入或语音...（Shift+Enter 换行）"
+                    disabled={isLoadingChat || !sceneMeta || speechStatus === "processing"}
+                    className="block w-full min-h-[44px] max-h-[120px] text-sm resize-none pt-2.5 px-3 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent placeholder:text-gray-400"
+                    rows={1}
+                  />
+                  <div className="flex items-center justify-end gap-1.5 p-1.5 shrink-0">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      onClick={handleVoiceToggle}
+                      disabled={isLoadingChat || !sceneMeta || speechStatus === "processing"}
+                      className="h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md disabled:opacity-50 transition-colors"
+                      title={speechStatus === "recording" ? "停止录音" : "语音输入"}
+                    >
+                      {speechStatus === "recording" ? (
+                        <StopCircle className="h-4 w-4 text-red-500" />
+                      ) : (
+                        <Mic className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="icon"
+                      disabled={!inputText.trim() || isLoadingChat || !sceneMeta}
+                      className="h-8 w-8 bg-emerald-600 hover:bg-emerald-700 rounded-md disabled:opacity-50 transition-colors shadow-sm"
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
+        {/* 聊天窗口开关按钮（仅在关闭时显示，固定贴视口右边缘） */}
+        {!isChatOpen && (
+          <div className="fixed right-0 top-1/3 -translate-y-1/2 z-[100] flex justify-end pointer-events-none">
+            <Button
+              onClick={() => setIsChatOpen(true)}
+              className="pointer-events-auto h-20 pl-5 pr-4 rounded-l-2xl rounded-r-none bg-gray-200/95 hover:bg-gray-300/95 text-gray-700 shadow-md border border-l border-gray-300/50 flex items-center justify-center gap-2 transition-all hover:shadow-lg active:scale-[0.98]"
+              title="打开 AI 助手"
+            >
+              <span className="shrink-0 w-20 h-20 flex items-center justify-center bg-transparent rounded overflow-hidden">
+                <Image src="/icon_jingyu.png?v=whale" alt="" width={80} height={80} className="w-full h-full object-contain bg-transparent" aria-hidden unoptimized />
+              </span>
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   )

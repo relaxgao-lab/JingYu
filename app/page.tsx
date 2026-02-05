@@ -1,10 +1,10 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from "react"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { hasVersionPage, getBook } from "@/lib/classics"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import OlarkChat from '@/components/ui/OlarkChat'
 
 interface SceneMeta {
@@ -248,7 +248,7 @@ export default function HomePage() {
         {/* 主内容 + 底部横条（主内容块拉满剩余高度，主行内容靠底） */}
         <div className="flex-1 flex flex-col min-h-0 w-full pt-[max(1rem,env(safe-area-inset-top))]">
         {/* 主行：手机端简单垂直堆叠占用剩余空间，桌面端 grid 三列 */}
-        <div className="flex-1 flex flex-col justify-end md:grid md:grid-cols-[280px_1fr_280px] md:gap-8 w-full max-w-7xl mx-auto px-3 md:px-6 md:items-center md:py-4 min-h-0">
+        <div className="flex-1 flex flex-col justify-end md:grid md:grid-cols-[280px_1fr_280px] md:gap-6 w-full max-w-6xl mx-auto px-3 md:px-6 md:items-center md:py-4 min-h-0">
           {/* 左：道德经 */}
           <div className="order-2 md:order-1 flex md:flex md:justify-end items-center md:items-stretch overflow-x-auto md:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-3 px-3 md:mx-0 md:px-0 mb-2 md:mb-0">
             {leftClassic.map((s, i) => {
@@ -295,10 +295,10 @@ export default function HomePage() {
             })}
           </div>
 
-          {/* 中：标语 + 标题 + 副标题 + 输入区（一组，紧凑层级） */}
-          <section className="order-1 md:order-2 shrink-0 flex flex-col items-center justify-center text-center px-3 md:px-4 mb-3 md:mb-0 w-full">
+          {/* 中：标语 + 标题 + 副标题 + 输入区（一组，紧凑层级，中间区域略上移） */}
+          <section className="order-1 md:order-2 shrink-0 flex flex-col items-center justify-center text-center px-3 md:px-4 mb-3 md:mb-0 w-full mt-2 md:mt-4">
             {/* 上方标语：两行紧贴 */}
-            <div className="flex flex-col gap-1 mb-3 md:mb-4">
+            <div className="flex flex-col gap-1 mb-3 md:mb-4 mt-6 md:mt-10">
               <p className="text-3xl md:text-5xl text-gray-500 font-medium tracking-wide">经鱼·心随经转</p>
               <p className="text-base md:text-base text-gray-400 leading-relaxed">点击书籍，开始阅读</p>
             </div>
@@ -311,39 +311,9 @@ export default function HomePage() {
                 <div className="h-px w-8 md:w-12 bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
               </div>
             </div>
-            {/* 输入区 */}
-            <div className="w-full max-w-xs flex flex-col gap-2 md:gap-2.5 relative">
-              <div className="flex flex-col sm:flex-row gap-2 w-full">
-                <Input
-                  value={scenario}
-                  onChange={(e) => setScenario(e.target.value)}
-                  placeholder="如：道德经、金刚经、心经..."
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter") return
-                    if (scenario.trim()) handleStartScenario()
-                  }}
-                  disabled={isLoading}
-                  className="rounded-lg border-gray-200 bg-white text-base md:text-base h-10 md:h-11 focus-visible:ring-0 focus-visible:outline-none"
-                />
-                <Button
-                  onClick={() => handleStartScenario()}
-                  disabled={isLoading || !scenario.trim()}
-                  className="rounded-lg shrink-0 px-5 md:px-6 h-10 md:h-11 text-sm md:text-base font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors"
-                >
-                  开始
-                </Button>
-              </div>
-              {/* 悬浮提示 */}
-              {isLoading && (
-                <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-50 transition-all duration-200 ease-in-out animate-[fadeIn_0.2s_ease-in-out_forwards,slideUp_0.2s_ease-in-out_forwards]">
-                  <div className="bg-gray-900 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></div>
-                    <span>生成场景中...</span>
-                  </div>
-                  {/* 小三角箭头 */}
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-                </div>
-              )}
+            {/* 鲸鱼图标入口：点击进入道德经阅读 */}
+            <div className="shrink-0 w-60 h-60 flex items-center justify-center bg-transparent" aria-hidden>
+              <Image src="/icon_main_JingYun.png" alt="" width={240} height={240} className="w-full h-full object-contain" unoptimized />
             </div>
           </section>
 
