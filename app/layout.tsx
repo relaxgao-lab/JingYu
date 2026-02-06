@@ -17,11 +17,20 @@ export const metadata: Metadata = {
     siteName: '经鱼·心随经转',
     title: '经鱼·心随经转',
     description: '经鱼·心随经转，AI让你成为自己的老师，与你一起读懂经典，读懂自己',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: '经鱼·心随经转',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: '经鱼·心随经转',
     description: '经鱼·心随经转，AI让你成为自己的老师，与你一起读懂经典，读懂自己',
+    images: ['/og-image.png'],
   },
   robots: {
     index: true,
