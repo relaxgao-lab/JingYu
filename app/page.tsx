@@ -95,6 +95,22 @@ export default function HomePage() {
   const bottomStripRef = useRef<HTMLDivElement>(null)
   const [bottomStripPaused, setBottomStripPaused] = useState(false)
 
+  // 预加载所有封面图片，避免返回首页时闪烁
+  useEffect(() => {
+    const imageUrls = [
+      '/cover_daodejing.jpg',
+      '/cover_jingangjing.jpg',
+      ...bottomCoverImages
+    ]
+    
+    // 预加载所有图片到浏览器缓存
+    // 使用 Image 对象可以确保图片被加载并缓存，避免返回首页时闪烁
+    imageUrls.forEach(url => {
+      const img = new window.Image()
+      img.src = url
+    })
+  }, [])
+
   useEffect(() => {
     let touchStartY = 0
     const handleTouchStart = (e: TouchEvent) => {
@@ -145,7 +161,6 @@ export default function HomePage() {
       setTimeout(() => setComingSoonMessage(null), 3000)
       return
     }
-
     const book = getBook(bookId)
     if (book) {
       handleReadClassic(bookId)
@@ -242,7 +257,20 @@ export default function HomePage() {
         </div>
       )}
 
-      <div className="flex-1 flex flex-col min-h-0 bg-white overflow-y-auto overflow-x-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      <div 
+        className="flex-1 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden relative"
+        style={{
+          backgroundImage: "url('/background-fairyland.jpg')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          backgroundAttachment: 'fixed'
+        }}
+      >
+        {/* 半透明遮罩层，确保内容可读性 */}
+        <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] pointer-events-none"></div>
+        {/* 内容层 */}
+        <div className="relative z-10 flex-1 flex flex-col min-h-0">
         {/* 主内容 + 底部横条（主内容块拉满剩余高度，主行内容靠底） */}
         <div className="flex-1 flex flex-col min-h-0 w-full pt-[max(1rem,env(safe-area-inset-top))]">
         {/* 主行：手机端简单垂直堆叠占用剩余空间，桌面端 grid 三列 */}
@@ -263,6 +291,7 @@ export default function HomePage() {
                     backgroundImage: "url('/cover_daodejing.jpg')",
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat',
                     boxShadow: '12px 8px 20px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.08), inset -2px 0 8px rgba(0,0,0,0.1)',
                   }}
                 >
@@ -331,6 +360,7 @@ export default function HomePage() {
                     backgroundImage: "url('/cover_jingangjing.jpg')",
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat',
                     boxShadow: '-12px 8px 20px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.08), inset 2px 0 8px rgba(0,0,0,0.1)',
                   }}
                 >
@@ -388,6 +418,7 @@ export default function HomePage() {
                       backgroundImage: `url('${coverImage}')`,
                       backgroundSize: 'cover',
                       backgroundPosition: 'center',
+                      backgroundRepeat: 'no-repeat',
                       boxShadow: '6px 4px 12px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.08), inset -1px 0 4px rgba(0,0,0,0.1)',
                     }}
                   >
@@ -421,6 +452,7 @@ export default function HomePage() {
               })}
             </div>
           </div>
+        </div>
         </div>
         </div>
       </div>

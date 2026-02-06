@@ -29,10 +29,17 @@ export default function ReadPage() {
   const bookId = params.book as string
   const chapterParam = params.chapter as string
 
-  const [chapter, setChapter] = useState<Chapter | null>(null)
-  const [totalChapters, setTotalChapters] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [currentChapterNum, setCurrentChapterNum] = useState(() => parseInt(chapterParam || "1", 10))
+  // 初始化时，如果章节数据已经可用，直接设置为 false，避免显示"加载中..."
+  const initialChapterNum = parseInt(chapterParam || "1", 10)
+  const initialIsVersionPage = bookId && initialChapterNum === 0 && hasVersionPage(bookId)
+  const initialChapter = bookId && !initialIsVersionPage ? getChapter(bookId, initialChapterNum) : null
+  // 如果章节数据已经准备好，或者章节号无效，不显示加载状态
+  const initialLoading = bookId ? (initialChapter === null && !initialIsVersionPage) : true
+  
+  const [chapter, setChapter] = useState<Chapter | null>(initialChapter)
+  const [totalChapters, setTotalChapters] = useState(() => bookId ? getTotalChapters(bookId) : 0)
+  const [loading, setLoading] = useState(initialLoading)
+  const [currentChapterNum, setCurrentChapterNum] = useState(initialChapterNum)
   
   // AI 聊天相关状态
   const [messages, setMessages] = useState<Message[]>([])
@@ -70,7 +77,16 @@ export default function ReadPage() {
   const lastChatWidthRef = useRef(chatWidth)
   const [showToc, setShowToc] = useState(false)
   // 默认打开；若有已保存的偏好则从 localStorage 恢复
-  const [isChatOpen, setIsChatOpen] = useState(true)
+  const [isChatOpen, setIsChatOpen] = useState(() => {
+    if (typeof window === "undefined") return true
+    try {
+      const saved = localStorage.getItem("read-chat-open")
+      if (saved !== null) return saved === "true"
+    } catch {
+      // 保持默认打开
+    }
+    return true
+  })
 
   useLayoutEffect(() => {
     try {
@@ -85,15 +101,59 @@ export default function ReadPage() {
     localStorage.setItem("read-chat-open", isChatOpen.toString())
   }, [isChatOpen])
 
-  const [contentTransitioning, setContentTransitioning] = useState(false)
   const contentScrollRef = useRef<HTMLDivElement>(null)
-  const [pageEntered, setPageEntered] = useState(false)
+  const contentAreaRef = useRef<HTMLDivElement>(null)
+  const [isChapterChanging, setIsChapterChanging] = useState(false)
+  const [contentAreaWidth, setContentAreaWidth] = useState<number>(0)
+  
+  // 使用 sessionStorage 保存上一个章节参数，避免组件重新挂载时丢失
+  const getPrevChapterParam = () => {
+    if (typeof window === 'undefined') return undefined
+    try {
+      return sessionStorage.getItem('read-prev-chapter-param') || undefined
+    } catch {
+      return undefined
+    }
+  }
+  
+  const setPrevChapterParam = (param: string) => {
+    if (typeof window === 'undefined') return
+    try {
+      sessionStorage.setItem('read-prev-chapter-param', param)
+    } catch {}
+  }
+  
+  // 检查是否是章节切换（组件重新挂载时）
+  const prevChapterParam = getPrevChapterParam()
+  const isInitialChapterChange = prevChapterParam !== undefined && prevChapterParam !== chapterParam
+  // 如果是章节切换，立即设置 pageEntered 为 true，避免闪屏
+  const [pageEntered, setPageEntered] = useState(isInitialChapterChange || prevChapterParam === undefined)
+  
   useEffect(() => {
-    const t = requestAnimationFrame(() => setPageEntered(true))
+    // 如果是章节切换或刷新页面，pageEntered 已经是 true，不需要动画
+    if (isInitialChapterChange || prevChapterParam === undefined) {
+      return
+    }
+    // 否则，正常初始化动画（仅用于首次加载）
+    const t = requestAnimationFrame(() => {
+      setPageEntered(true)
+    })
     return () => cancelAnimationFrame(t)
   }, [])
-
+  
+  // 在章节切换时，立即设置 pageEntered 为 true，避免触发过渡动画
   useEffect(() => {
+    if (isChapterChanging) {
+      setPageEntered(true)
+    }
+  }, [isChapterChanging, chapterParam])
+
+  // 使用 useLayoutEffect 同步更新，在浏览器绘制前完成，避免闪烁
+  useLayoutEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:150',message:'useLayoutEffect entry',data:{bookId,chapterParam,currentChapterNum,chapter:chapter?chapter.chapter:null,loading,isVersionPage:currentChapterNum===0&&hasVersionPage(bookId)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,E'})}).catch(()=>{});
+    // #endregion
+    
     if (!bookId || chapterParam === undefined || chapterParam === '') {
       router.push('/')
       return
@@ -104,20 +164,97 @@ export default function ReadPage() {
       return
     }
     const isVersionPage = num === 0 && hasVersionPage(bookId)
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:160',message:'After parse params',data:{num,isVersionPage,hasChapter:!isVersionPage?hasChapter(bookId,num):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+    
     if (!isVersionPage && !hasChapter(bookId, num)) {
       router.push('/')
       return
     }
 
+    // 如果章节号相同且已有数据，跳过更新（避免不必要的重新渲染）
+    // 但需要确保数据确实存在，如果 chapter 为 null 且不是版本页，需要重新加载
+    if (num === currentChapterNum && chapter !== null) {
+      // #region agent log
+      fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:168',message:'Skipping update - chapter exists',data:{num,currentChapterNum,chapterExists:chapter!==null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      // 确保 sceneMeta 已设置（刷新页面时可能未设置）
+      if (!sceneMeta && chapter) {
+        setSceneMeta({
+          aiRole: "解读助手",
+          userRole: "读者",
+          context: `正在阅读《${bookId}》第${chapter.chapter}章：${chapter.title}`,
+          scenario: "读者对当前章节内容有疑问或想深入了解"
+        })
+      }
+      // 章节切换完成，恢复动画
+      if (isChapterChanging) {
+        setIsChapterChanging(false)
+      }
+      return
+    }
+    
+    // 如果是版本页且章节号相同，也需要检查是否有版本说明
+    // 但需要确保数据确实存在，如果版本说明不存在，需要重新加载
+    if (num === currentChapterNum && isVersionPage) {
+      const book = getBook(bookId)
+      // #region agent log
+      fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:178',message:'Version page check',data:{num,currentChapterNum,hasVersionNote:!!book?.versionNote,loading},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
+      // #endregion
+      if (book?.versionNote) {
+        // 如果已经有版本说明且不在加载状态，跳过更新
+        if (!loading) {
+          // #region agent log
+          fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:182',message:'Skipping version page update',data:{loading},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
+          // 确保 sceneMeta 已设置（刷新页面时可能未设置）
+          if (!sceneMeta) {
+            setSceneMeta({
+              aiRole: "解读助手",
+              userRole: "读者",
+              context: `正在阅读《${bookId}》的版本说明`,
+              scenario: "读者对书籍的版本和背景感兴趣"
+            })
+          }
+          // 章节切换完成，恢复动画
+          if (isChapterChanging) {
+            setIsChapterChanging(false)
+          }
+          return
+        }
+        // 如果正在加载，继续执行后面的逻辑来设置状态
+      } else {
+        // 如果没有版本说明，跳转到首页
+        router.push('/')
+        return
+      }
+    }
+
+    // 使用 sessionStorage 来检测章节切换，因为组件重新挂载时 ref 会被重置
+    const prevChapterParam = getPrevChapterParam()
+    const isChanging = prevChapterParam !== undefined && prevChapterParam !== chapterParam
+    
     const total = getTotalChapters(bookId)
     const book = getBook(bookId)
 
+    // 同步更新状态，确保在浏览器绘制前完成
+    // 关键：先设置loading=false和isChapterChanging，避免显示"加载中..."导致闪屏
     if (isVersionPage) {
+      // #region agent log
+      fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:206',message:'Version page branch',data:{bookId,hasVersionNote:!!book?.versionNote},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      // 如果检测到切换，立即禁用动画
+      if (isChanging) {
+        setIsChapterChanging(true)
+      }
+      // 更新 sessionStorage（无论是否切换都要更新）
+      setPrevChapterParam(chapterParam)
+      setLoading(false)
       setCurrentChapterNum(0)
       setChapter(null)
       setTotalChapters(total)
-      setLoading(false)
-      contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" })
       if (book?.versionNote) {
         setSceneMeta({
           aiRole: "解读助手",
@@ -125,24 +262,86 @@ export default function ReadPage() {
           context: `正在阅读《${bookId}》的版本说明`,
           scenario: "读者对书籍的版本和背景感兴趣"
         })
+        // #region agent log
+        fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:217',message:'Version page state updated',data:{loadingSet:false,currentChapterNumSet:0,chapterSet:null,sceneMetaSet:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
       }
     } else {
       const ch = getChapter(bookId, num)
+      // #region agent log
+      fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:226',message:'getChapter result',data:{bookId,num,chapterFound:!!ch,chapterNum:ch?.chapter},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       if (ch) {
+        // 如果检测到切换，立即禁用动画
+        if (isChanging) {
+          setIsChapterChanging(true)
+        }
+        // 更新 sessionStorage（无论是否切换都要更新）
+        setPrevChapterParam(chapterParam)
+        setLoading(false)
         setChapter(ch)
         setCurrentChapterNum(num)
         setTotalChapters(total)
-        setLoading(false)
-        contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" })
         setSceneMeta({
           aiRole: "解读助手",
           userRole: "读者",
           context: `正在阅读《${bookId}》第${ch.chapter}章：${ch.title}`,
           scenario: "读者对当前章节内容有疑问或想深入了解"
         })
+        // #region agent log
+        fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:235',message:'State updated after getChapter',data:{chapterSet:true,loadingSet:false,currentChapterNumSet:num},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+      } else {
+        // #region agent log
+        fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:245',message:'Chapter not found, redirecting',data:{bookId,num},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        // 如果章节不存在，跳转到首页
+        router.push('/')
       }
     }
-  }, [bookId, chapterParam, router])
+    
+    // 章节切换完成，恢复动画（延迟到下一帧，确保DOM已更新）
+    if (isChanging) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsChapterChanging(false)
+        })
+      })
+    }
+  }, [bookId, chapterParam, router, currentChapterNum, chapter, loading])
+
+  // 监听内容区域宽度，用于决定是否显示导航按钮
+  useEffect(() => {
+    if (!contentAreaRef.current) return
+    
+    const updateWidth = () => {
+      if (contentAreaRef.current) {
+        setContentAreaWidth(contentAreaRef.current.offsetWidth)
+      }
+    }
+    
+    // 初始设置
+    updateWidth()
+    
+    // 使用 ResizeObserver 监听宽度变化
+    const resizeObserver = new ResizeObserver(updateWidth)
+    resizeObserver.observe(contentAreaRef.current)
+    
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [isChatOpen, chatWidth, chapter, currentChapterNum])
+
+  // 滚动操作单独处理，在内容渲染后执行
+  useEffect(() => {
+    if (!loading && (chapter || (currentChapterNum === 0 && hasVersionPage(bookId)))) {
+      // 使用 setTimeout 0 确保在下一个事件循环执行，此时 DOM 已完全更新
+      const timer = setTimeout(() => {
+        contentScrollRef.current?.scrollTo({ top: 0, behavior: "instant" })
+      }, 0)
+      return () => clearTimeout(timer)
+    }
+  }, [currentChapterNum, chapter, loading, bookId])
 
   // 消息滚动到底部
   useEffect(() => {
@@ -166,12 +365,13 @@ export default function ReadPage() {
       setShowToc(false)
       return
     }
-    setContentTransitioning(true)
-    setTimeout(() => {
-      setShowToc(false)
-      router.push(`/read/${bookId}/${num}`)
-      setContentTransitioning(false)
-    }, 200)
+    setShowToc(false)
+    // 标记正在切换章节，禁用过渡动画
+    // 注意：这个状态会在组件重新挂载时丢失，所以useLayoutEffect中会重新设置
+    setIsChapterChanging(true)
+    router.push(`/read/${bookId}/${num}`)
+    // 不再在这里重置isChapterChanging，因为组件会重新挂载
+    // useLayoutEffect会在检测到章节切换时自动处理
   }
 
   const handlePrevChapter = () => {
@@ -373,27 +573,106 @@ export default function ReadPage() {
     sendMessage(text)
   }
 
+  // 将标题中的中文数字转换为阿拉伯数字
+  const formatTitleWithArabicNumbers = (title: string, chapterNum: number): string => {
+    // 如果标题格式是"第X章"（X为中文数字），直接用阿拉伯数字替换
+    // 匹配：第 + 中文数字 + 章
+    const chineseNumberPattern = /第[零一二三四五六七八九十百千万]+章/
+    if (chineseNumberPattern.test(title)) {
+      return title.replace(chineseNumberPattern, `第${chapterNum}章`)
+    }
+    return title
+  }
+
+  // 生僻字读音映射表（道德经中的生僻字）
+  const rareCharPronunciations: Record<string, string> = {
+    '攘': 'rǎng', '颣': 'lèi', '渝': 'yú', '隅': 'yú', '琭': 'lù', '珞': 'luò',
+    '蹶': 'jué', '讷': 'nè', '咎': 'jiù', '刍': 'chú', '牖': 'yǒu', '歙': 'xī',
+    '兕': 'sì', '虿': 'chài', '虺': 'huǐ', '螫': 'shì', '攫': 'jué', '牝': 'pìn',
+    '嗄': 'shà', '刿': 'guì', '啬': 'sè', '柢': 'dǐ', '莅': 'lì', '徼': 'jiào',
+    '橐': 'tuó', '籥': 'yuè', '埏': 'shān', '埴': 'zhí', '畋': 'tián', '诘': 'jié',
+    '皦': 'jiǎo', '惚': 'hū', '恍': 'huǎng', '澹': 'dàn', '飂': 'liáo', '窈': 'yǎo',
+    '赘': 'zhuì', '辎': 'zī', '谪': 'zhé', '楗': 'jiàn', '忒': 'tè', '羸': 'léi',
+    '隳': 'huī', '毂': 'gǔ', '辐': 'fú', '辙': 'zhé', '瑕': 'xiá', '筹': 'chóu',
+    '袭': 'xí', '矜': 'jīn', '恬': 'tián', '譬': 'pì', '恃': 'shì', '饵': 'ěr',
+    '斲': 'zhuó', '繟': 'chǎn', '狎': 'xiá'
+  }
+
+  // 为文本中的生僻字添加读音标注（使用 HTML ruby 标签）
+  const addPronunciationAnnotations = (text: string): string => {
+    let result = text
+    // 遍历所有生僻字，为每个字添加读音标注
+    Object.keys(rareCharPronunciations).forEach(char => {
+      const pronunciation = rareCharPronunciations[char]
+      // 使用 ruby 标签添加读音标注
+      const regex = new RegExp(char, 'g')
+      result = result.replace(regex, `<ruby>${char}<rt>${pronunciation}</rt></ruby>`)
+    })
+    return result
+  }
+
+  // 格式化版本说明文本，提升排版美感
+  const formatVersionNote = (text: string): string => {
+    if (!text) return ""
+    
+    // 添加读音标注
+    let formatted = addPronunciationAnnotations(text)
+    
+    // 识别三个理由的编号，添加视觉层次
+    formatted = formatted
+      .replace(/一、/g, '<div class="version-reason-item"><p class="version-reason-title">一、</p><p class="version-reason-content">')
+      .replace(/二、/g, '</p></div><div class="version-reason-item"><p class="version-reason-title">二、</p><p class="version-reason-content">')
+      .replace(/三、/g, '</p></div><div class="version-reason-item"><p class="version-reason-title">三、</p><p class="version-reason-content">')
+    
+    // 包装开头段落
+    if (!formatted.startsWith('<div')) {
+      formatted = '<p class="version-intro">' + formatted
+    }
+    
+    // 将长段落按句号分割，添加段落间距
+    formatted = formatted.replace(/。/g, '。</p><p class="version-paragraph">')
+    
+    // 添加闭合标签
+    if (formatted.includes('三、')) {
+      formatted += '</p></div>'
+    } else {
+      formatted += '</p>'
+    }
+    
+    return formatted
+  }
+
   const isVersionPage = currentChapterNum === 0 && hasVersionPage(bookId)
-  const pageTitle = isVersionPage ? "版本说明" : (chapter?.title ?? "")
-  const showContent = !loading && (chapter || isVersionPage)
+  const pageTitle = isVersionPage 
+    ? "版本说明" 
+    : (chapter?.title ? formatTitleWithArabicNumbers(chapter.title, currentChapterNum) : "")
+  const showContent = !loading && (chapter !== null || isVersionPage)
+  
+  // #region agent log
+  if (typeof window !== 'undefined') {
+    fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:607',message:'showContent calculation',data:{loading,chapter:chapter?{num:chapter.chapter,hasTitle:!!chapter.title,hasContent:!!chapter.content,contentLength:chapter.content?.length}:null,isVersionPage,showContent,showContentType:typeof showContent,pageEntered,isInitialChapterChange},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'E'})}).catch(()=>{});
+  }
+  // #endregion
 
   return (
     <div
-      className={`h-screen flex flex-col bg-stone-50/60 transition-opacity duration-300 ease-out ${pageEntered ? "opacity-100" : "opacity-0"}`}
+      className={`h-screen flex flex-col bg-stone-50/60 ${pageEntered && !isChapterChanging ? "transition-opacity duration-300 ease-out" : ""} ${pageEntered ? "opacity-100" : "opacity-0"}`}
       aria-busy={!pageEntered}
     >
       {/* 主要内容区域 - 左右分栏，右侧宽度可拖拽 */}
       <div className="flex-1 flex overflow-hidden">
         {/* 左侧：章节内容（宽度与聊天窗口同步过渡，拖拽时无动画） */}
         <div
+          ref={contentAreaRef}
           className="shrink-0 min-w-0 flex flex-col overflow-hidden border-r border-gray-200 bg-white relative"
           style={{
             width: isChatOpen ? `calc(100% - ${chatWidth}px - 6px)` : "100%",
-            transition: isResizing ? "none" : "width 0.55s cubic-bezier(0.25, 0.1, 0.25, 1)",
+            // 章节切换时禁用过渡动画，避免闪动
+            transition: (isResizing || isChapterChanging) ? "none" : "width 0.55s cubic-bezier(0.25, 0.1, 0.25, 1)",
           }}
         >
           {/* 页面内导航：返回首页、标题、目录（章节信息在页脚） */}
-          <div className="sticky top-0 z-10 max-w-[44rem] mx-auto w-full px-6 md:px-12 py-2 bg-white/95 backdrop-blur-sm border-b border-gray-200 shrink-0">
+          <div className="sticky top-0 z-10 max-w-[44rem] lg:max-w-[52rem] xl:max-w-[60rem] 2xl:max-w-[68rem] mx-auto w-full px-6 md:px-12 py-2 bg-white/95 backdrop-blur-sm border-b border-gray-200 shrink-0">
             <div className="flex items-center justify-between gap-3">
               <Button
                 variant="ghost"
@@ -404,10 +683,10 @@ export default function ReadPage() {
               </Button>
               {showContent && (
                 <h1 
-                  className="text-lg md:text-xl font-semibold text-gray-900 tracking-tight text-center leading-tight flex-1"
+                  className="text-lg md:text-xl lg:text-2xl xl:text-[1.75rem] font-semibold text-gray-900 tracking-tight text-center leading-tight flex-1"
                   style={{ fontFamily: '"LXGW WenKai", "Noto Serif SC", serif' }}
                 >
-                  {isVersionPage ? "版本说明" : chapter?.title ?? ""}
+                  {pageTitle}
                 </h1>
               )}
               <Button
@@ -422,61 +701,80 @@ export default function ReadPage() {
               </Button>
             </div>
           </div>
-          <div ref={contentScrollRef} className="flex-1 overflow-y-auto min-h-0">
-            {/* 内容区：正文或版本详情（全宽），切换时淡入淡出 */}
-            <div className={`min-h-full flex items-center justify-center transition-opacity duration-200 ease-out ${contentTransitioning ? "opacity-0" : "opacity-100"}`}>
+          <div ref={contentScrollRef} className="flex-1 overflow-y-auto min-h-0 scroll-smooth">
+            {/* 内容区：正文或版本详情（全宽），移除过渡动画避免闪动 */}
+            {/* 所有内容都使用 items-center 居中显示，因为章节内容都是短篇，居中更美观 */}
+            <div className="min-h-full flex items-center justify-center">
               {!showContent ? (
-                <div className="flex items-center justify-center">
+                <div className="flex items-center justify-center py-20 min-h-[60vh]">
                   <span className="text-gray-500 text-sm">加载中...</span>
                 </div>
-              ) : (() => {
-                // 获取当前章节的颜色
-                const chapterColor = isVersionPage 
-                  ? getChapterColor(0) 
-                  : chapter 
-                    ? getChapterColor(chapter.chapter) 
-                    : chapterCardColors[0]
-                
-                return (
-                  /* 正文内容：在页面中上下左右居中 */
-                  <article className="read-content max-w-[42rem] w-full mx-auto px-5 md:px-10 py-6">
+              ) : (
+                <>
+                  {/* 正文内容：不设置最小高度，让短内容自然居中显示，响应式宽度，为导航按钮留出空间 */}
+                  <article className="read-content max-w-[42rem] lg:max-w-[50rem] xl:max-w-[58rem] 2xl:max-w-[66rem] w-full mx-auto py-8" style={{ paddingLeft: contentAreaWidth > 700 ? '4rem' : contentAreaWidth > 600 ? '3.5rem' : contentAreaWidth > 550 ? '3rem' : '2rem', paddingRight: contentAreaWidth > 700 ? '4rem' : contentAreaWidth > 600 ? '3.5rem' : contentAreaWidth > 550 ? '3rem' : '2rem' }}>
+                      {/* #region agent log */}
+                      {typeof window !== 'undefined' && void fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:673',message:'Render branch check',data:{showContent,isVersionPage,chapter:chapter?chapter.chapter:null,hasContent:chapter?.content?chapter.content.length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'E'})}).catch(()=>{})}
+                      {/* #endregion */}
                       {isVersionPage ? (
-                        /* 版本详情页 */
-                        <div 
-                          className="read-body select-text text-base md:text-lg leading-[1.5] md:leading-[1.55] text-gray-800 text-left w-full font-bold"
-                          style={{ fontFamily: '"LXGW WenKai", "Noto Serif SC", serif', userSelect: 'text', WebkitUserSelect: 'text' }}
-                        >
-                          <div className="whitespace-pre-wrap space-y-1 md:space-y-1.5">{getBook(bookId)?.versionNote ?? ""}</div>
-                        </div>
-                      ) : chapter ? (
-                        /* 章节正文 */
-                        <div 
-                          className="read-body select-text w-full text-gray-800"
-                          style={{ fontFamily: '"LXGW WenKai", "Noto Serif SC", serif', userSelect: 'text', WebkitUserSelect: 'text' }}
-                        >
-                          <div className="space-y-1 md:space-y-1.5">
-                            {chapter.content
-                              .split('\n')
-                              .filter(Boolean)
-                              .map((line, i) => (
-                                <p 
-                                  key={i} 
-                                  className="text-base md:text-lg leading-[1.5] md:leading-[1.55] text-gray-800 text-left tracking-normal font-bold"
-                                >
-                                  {line}
-                                </p>
-                              ))}
+                        <>
+                          {/* 版本详情页 - 居中显示，优化排版 */}
+                          <div 
+                            className="read-body select-text text-base md:text-lg lg:text-xl xl:text-[1.25rem] text-left w-full"
+                            style={{ fontFamily: '"LXGW WenKai", "Noto Serif SC", serif', userSelect: 'text', WebkitUserSelect: 'text', letterSpacing: '0.08em' }}
+                          >
+                            <div 
+                              className="version-note-content"
+                              dangerouslySetInnerHTML={{ 
+                                __html: formatVersionNote(getBook(bookId)?.versionNote ?? "") 
+                              }}
+                            />
                           </div>
-                        </div>
-                      ) : null}
+                        </>
+                      ) : chapter ? (
+                        <>
+                          {/* 章节正文 - 居中显示，适合短篇内容 */}
+                          {/* #region agent log */}
+                          {typeof window !== 'undefined' && void fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:688',message:'Rendering chapter content',data:{chapterNum:chapter.chapter,hasContent:!!chapter.content,contentLength:chapter.content?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'E'})}).catch(()=>{})}
+                          {/* #endregion */}
+                          <div 
+                            className="read-body select-text w-full text-gray-800"
+                            style={{ fontFamily: '"LXGW WenKai", "Noto Serif SC", serif', userSelect: 'text', WebkitUserSelect: 'text' }}
+                          >
+                            <div className="space-y-2">
+                              {chapter.content
+                                .split('\n')
+                                .filter(Boolean)
+                                .map((line, i) => {
+                                  const annotatedLine = addPronunciationAnnotations(line)
+                                  return (
+                                    <p 
+                                      key={i}
+                                      className="text-base md:text-lg lg:text-xl xl:text-[1.25rem] leading-[1.6] lg:leading-[1.7] text-gray-800 text-left font-bold"
+                                      style={{ letterSpacing: '0.08em' }}
+                                      dangerouslySetInnerHTML={{ __html: annotatedLine }}
+                                    />
+                                  )
+                                })}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {/* #region agent log */}
+                          {typeof window !== 'undefined' && void fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:715',message:'Chapter is null in render',data:{showContent,isVersionPage,chapter:null},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'E'})}).catch(()=>{})}
+                          {/* #endregion */}
+                          null
+                        </>
+                      )}
                   </article>
-                )
-              })()}
+                </>
+              )}
             </div>
           </div>
           {/* 页脚：始终在底部 */}
           <footer className="shrink-0 py-4 px-6 border-t border-gray-200 bg-white">
-            <div className="max-w-[44rem] mx-auto text-center">
+            <div className="max-w-[44rem] lg:max-w-[52rem] xl:max-w-[60rem] 2xl:max-w-[68rem] mx-auto text-center">
               <span className="text-xs md:text-sm text-gray-500 tracking-widest">
                 {pageTitle} / 共{totalChapters}章
               </span>
@@ -526,37 +824,41 @@ export default function ReadPage() {
               </div>
             </div>
           )}
-          {/* 悬浮箭头：不占用内容空间，距离边缘较远 */}
-          <div className="absolute left-6 md:left-10 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
-            <div className="pointer-events-auto">
-              <Button
-                onClick={handlePrevChapter}
-                disabled={getPrevChapter(bookId, currentChapterNum) === null}
-                variant="outline"
-                size="icon"
-                className={`rounded-full border shadow-md ${navPrevColor.bg} ${navPrevColor.border} ${navPrevColor.text} ${navPrevColor.hover} disabled:opacity-50 h-10 w-10 md:h-12 md:w-12`}
-                title="上一章"
-                aria-label="上一章"
-              >
-                <ChevronLeft className="h-5 w-5 md:h-6 md:w-6" />
-              </Button>
-            </div>
-          </div>
-          <div className="absolute right-6 md:right-10 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
-            <div className="pointer-events-auto">
-              <Button
-                onClick={handleNextChapter}
-                disabled={getNextChapter(bookId, currentChapterNum) === null}
-                variant="outline"
-                size="icon"
-                className={`rounded-full border shadow-md ${navNextColor.bg} ${navNextColor.border} ${navNextColor.text} ${navNextColor.hover} disabled:opacity-50 h-10 w-10 md:h-12 md:w-12`}
-                title="下一章"
-                aria-label="下一章"
-              >
-                <ChevronRight className="h-5 w-5 md:h-6 md:w-6" />
-              </Button>
-            </div>
-          </div>
+          {/* 悬浮箭头：不占用内容空间，距离边缘较远，根据内容区域宽度动态显示 */}
+          {contentAreaWidth > 550 && (
+            <>
+              <div className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
+                <div className="pointer-events-auto">
+                  <Button
+                    onClick={handlePrevChapter}
+                    disabled={getPrevChapter(bookId, currentChapterNum) === null}
+                    variant="outline"
+                    size="icon"
+                    className={`rounded-full border shadow-md ${navPrevColor.bg} ${navPrevColor.border} ${navPrevColor.text} ${navPrevColor.hover} disabled:opacity-50 h-10 w-10 md:h-12 md:w-12`}
+                    title="上一章"
+                    aria-label="上一章"
+                  >
+                    <ChevronLeft className="h-5 w-5 md:h-6 md:w-6" />
+                  </Button>
+                </div>
+              </div>
+              <div className="absolute right-3 md:right-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
+                <div className="pointer-events-auto">
+                  <Button
+                    onClick={handleNextChapter}
+                    disabled={getNextChapter(bookId, currentChapterNum) === null}
+                    variant="outline"
+                    size="icon"
+                    className={`rounded-full border shadow-md ${navNextColor.bg} ${navNextColor.border} ${navNextColor.text} ${navNextColor.hover} disabled:opacity-50 h-10 w-10 md:h-12 md:w-12`}
+                    title="下一章"
+                    aria-label="下一章"
+                  >
+                    <ChevronRight className="h-5 w-5 md:h-6 md:w-6" />
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* 拖拽条（带顺滑过渡） */}
