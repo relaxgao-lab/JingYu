@@ -45,6 +45,11 @@ const bottomClassics = [
   { label: "黄帝内经", value: "《黄帝内经》，医学经典", intro: "医学经典" },
 ]
 
+// 手机端：上横条与下横条经典不重复，按列表均分
+const splitIndex = Math.ceil(bottomClassics.length / 2)
+const topStripClassics = bottomClassics.slice(0, splitIndex)      // 上横条
+const bottomStripClassicsOnly = bottomClassics.slice(splitIndex) // 下横条（仅手机端与上不重复；桌面端仍用全部）
+
 // 参考 EnglishAI 的 pastel 卡片配色（每张卡片不同柔和色）
 const pastelCards = [
   { bg: "bg-slate-100", border: "border-slate-200", ring: "focus:ring-slate-300", avatar: "bg-slate-200 text-slate-700" },
@@ -94,6 +99,17 @@ export default function HomePage() {
   const [comingSoonMessage, setComingSoonMessage] = useState<string | null>(null)
   const bottomStripRef = useRef<HTMLDivElement>(null)
   const [bottomStripPaused, setBottomStripPaused] = useState(false)
+  const topStripRef = useRef<HTMLDivElement>(null)
+  const [topStripPaused, setTopStripPaused] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 767px)")
+    const update = () => setIsMobile(mql.matches)
+    update()
+    mql.addEventListener("change", update)
+    return () => mql.removeEventListener("change", update)
+  }, [])
 
   // 预加载所有封面图片，避免返回首页时闪烁
   useEffect(() => {
@@ -145,6 +161,22 @@ export default function HomePage() {
       return () => clearInterval(interval)
     }
   }, [bottomStripPaused])
+
+  // 手机端顶部书籍横条自动滚动
+  useEffect(() => {
+    if (topStripRef.current && !topStripPaused) {
+      const el = topStripRef.current
+      const step = 1
+      const interval = setInterval(() => {
+        if (!el || topStripPaused) return
+        const segmentWidth = el.scrollWidth / 2
+        if (segmentWidth <= 0) return
+        el.scrollLeft += step
+        if (el.scrollLeft >= segmentWidth - step) el.scrollLeft -= segmentWidth
+      }, 30)
+      return () => clearInterval(interval)
+    }
+  }, [topStripPaused])
 
 
   // 处理阅读经典（跳转到阅读页；有版本详情页的书籍先进入第 0 页）
@@ -258,13 +290,9 @@ export default function HomePage() {
       )}
 
       <div 
-        className="flex-1 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden relative"
+        className="flex-1 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden relative bg-cover bg-center bg-no-repeat mobile-bg-scroll bg-fixed"
         style={{
           backgroundImage: "url('/background-fairyland.jpg')",
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
-          backgroundAttachment: 'fixed'
         }}
       >
         {/* 半透明遮罩层，确保内容可读性 */}
@@ -273,10 +301,49 @@ export default function HomePage() {
         <div className="relative z-10 flex-1 flex flex-col min-h-0">
         {/* 主内容 + 底部横条（主内容块拉满剩余高度，主行内容靠底） */}
         <div className="flex-1 flex flex-col min-h-0 w-full pt-[max(1rem,env(safe-area-inset-top))]">
-        {/* 主行：手机端简单垂直堆叠占用剩余空间，桌面端 grid 三列 */}
+        {/* 手机端顶部：自动滚动的书籍横条 */}
+        <div
+          ref={topStripRef}
+          onTouchStart={() => setTopStripPaused(true)}
+          onTouchEnd={() => setTopStripPaused(false)}
+          className="md:hidden shrink-0 w-full overflow-x-auto overflow-y-hidden px-3 py-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        >
+          <div className="flex gap-2 min-w-max justify-center py-1">
+            {[...topStripClassics, ...topStripClassics].map((s, i) => {
+              const originalIndex = i % topStripClassics.length
+              const p = pastelCards[originalIndex % pastelCards.length]
+              const coverImage = bottomCoverImages[originalIndex % bottomCoverImages.length]
+              return (
+                <button
+                  key={`top-${s.label}-${i}`}
+                  type="button"
+                  onClick={() => handleBookClick(s.label)}
+                  disabled={isLoading}
+                  className={`relative flex items-center justify-center shrink-0 w-24 h-32 rounded-r-sm border-t border-r border-b border-gray-300 hover:shadow-xl hover:scale-[1.05] focus:outline-none focus:ring-2 ${p.ring} focus:ring-offset-2 disabled:opacity-60 transition-transform touch-manipulation overflow-hidden`}
+                  aria-label={`读${s.label}`}
+                  style={{
+                    backgroundImage: `url('${coverImage}')`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat',
+                    boxShadow: '6px 4px 12px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.08), inset -1px 0 4px rgba(0,0,0,0.1)',
+                  }}
+                >
+                  <div className={`absolute inset-0 ${p.bg} opacity-60 rounded-r-sm pointer-events-none`} />
+                  <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-gray-600 via-gray-500 to-gray-600 rounded-l-sm shadow-inner z-10" />
+                  <div className="absolute inset-1 border border-gray-400/30 rounded-sm pointer-events-none z-10" />
+                  <span className="relative z-20 text-sm font-bold text-gray-900 tracking-wider drop-shadow-sm" style={{ fontFamily: 'serif', writingMode: 'vertical-rl', textOrientation: 'upright', letterSpacing: '0.1em' }}>
+                    {s.label}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        {/* 主行：手机端标题在上、两本书竖排站立在下；桌面端 grid 三列 */}
         <div className="flex-1 flex flex-col justify-end md:grid md:grid-cols-[280px_1fr_280px] md:gap-6 w-full max-w-6xl mx-auto px-3 md:px-6 md:items-center md:py-4 min-h-0">
-          {/* 左：道德经 */}
-          <div className="order-2 md:order-1 flex md:flex md:justify-end items-center md:items-stretch overflow-x-auto md:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-3 px-3 md:mx-0 md:px-0 mb-2 md:mb-0">
+          {/* 左：道德经（桌面端） */}
+          <div className="order-2 md:order-1 hidden md:flex md:justify-end items-stretch overflow-x-auto md:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-3 px-3 md:mx-0 md:px-0 mb-2 md:mb-0">
             {leftClassic.map((s, i) => {
               const p = pastelCards[i % pastelCards.length]
               return (
@@ -285,7 +352,7 @@ export default function HomePage() {
                   type="button"
                   onClick={() => handleReadClassic('daodejing')}
                   disabled={isLoading}
-                  className="relative flex items-center justify-center shrink-0 w-[200px] h-[320px] md:w-[260px] md:h-[420px] rounded-r-lg md:rounded-r-xl border-t-2 border-r-2 border-b-2 border-gray-300 hover:shadow-2xl hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 disabled:opacity-60 transition-all touch-manipulation overflow-hidden"
+                  className="relative flex items-center justify-center shrink-0 w-[260px] h-[420px] rounded-r-xl border-t-2 border-r-2 border-b-2 border-gray-300 hover:shadow-2xl hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 disabled:opacity-60 transition-all touch-manipulation overflow-hidden"
                   aria-label={`读${s.label}`}
                   style={{
                     backgroundImage: "url('/cover_daodejing.jpg')",
@@ -322,6 +389,46 @@ export default function HomePage() {
             })}
           </div>
 
+          {/* 手机端：道德经 + 金刚经 左右并排、竖版站立 */}
+          <div className="order-2 flex md:hidden flex-row items-center justify-center gap-4 mb-3 shrink-0">
+            <button
+              type="button"
+              onClick={() => handleReadClassic('daodejing')}
+              disabled={isLoading}
+              className="relative flex items-center justify-center shrink-0 w-[140px] h-[220px] rounded-r-lg border-t-2 border-r-2 border-b-2 border-gray-300 hover:shadow-2xl hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 disabled:opacity-60 transition-all touch-manipulation overflow-hidden"
+              aria-label="读道德经"
+              style={{
+                backgroundImage: "url('/cover_daodejing.jpg')",
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+                boxShadow: '12px 8px 20px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.08), inset -2px 0 8px rgba(0,0,0,0.1)',
+              }}
+            >
+              <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-b from-gray-600 via-gray-500 to-gray-600 rounded-l-lg shadow-inner" />
+              <div className="absolute inset-2 border border-gray-400/30 rounded-lg pointer-events-none" />
+              <span className="relative z-10 text-lg font-bold text-gray-900 tracking-wider" style={{ fontFamily: 'serif', writingMode: 'vertical-rl', textOrientation: 'upright', letterSpacing: '0.2em' }}>道德经</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleBookClick('金刚经')}
+              disabled={isLoading}
+              className="relative flex items-center justify-center shrink-0 w-[140px] h-[220px] rounded-l-lg border-t-2 border-l-2 border-b-2 border-gray-300 hover:shadow-2xl hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 disabled:opacity-60 transition-all touch-manipulation overflow-hidden"
+              aria-label="读金刚经"
+              style={{
+                backgroundImage: "url('/cover_jingangjing.jpg')",
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+                boxShadow: '-12px 8px 20px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.08), inset 2px 0 8px rgba(0,0,0,0.1)',
+              }}
+            >
+              <div className="absolute right-0 top-0 bottom-0 w-3 bg-gradient-to-b from-gray-600 via-gray-500 to-gray-600 rounded-r-lg shadow-inner" />
+              <div className="absolute inset-2 border border-gray-400/30 rounded-lg pointer-events-none" />
+              <span className="relative z-10 text-lg font-bold text-gray-900 tracking-wider" style={{ fontFamily: 'serif', writingMode: 'vertical-rl', textOrientation: 'upright', letterSpacing: '0.2em' }}>金刚经</span>
+            </button>
+          </div>
+
           {/* 中：标语 + 标题 + 副标题 + 输入区（一组，紧凑层级，中间区域略上移） */}
           <section className="order-1 md:order-2 shrink-0 flex flex-col items-center justify-center text-center px-3 md:px-4 mb-3 md:mb-0 w-full mt-2 md:mt-4">
             {/* 上方标语：两行紧贴 */}
@@ -332,20 +439,20 @@ export default function HomePage() {
             {/* 主标题：有设计感的层次 */}
             <div className="flex flex-col gap-2 md:gap-2.5 mb-4 md:mb-5">
            
-              <div className="flex items-center justify-center gap-2 mt-1">
-                <div className="h-px w-8 md:w-12 bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
-                <p className="text-sm md:text-base text-gray-600 font-medium tracking-wide">AI让你成为自己的老师，与你读经，读懂自己</p>
-                <div className="h-px w-8 md:w-12 bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+              <div className="flex items-center justify-center gap-2 mt-1 overflow-x-auto min-w-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="h-px w-8 md:w-12 shrink-0 bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+                <p className="text-sm md:text-base text-gray-600 font-medium tracking-wide whitespace-nowrap shrink-0">AI让你成为自己的老师，与你读经，读懂自己</p>
+                <div className="h-px w-8 md:w-12 shrink-0 bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
               </div>
             </div>
-            {/* 鲸鱼图标入口：点击进入道德经阅读 */}
-            <div className="shrink-0 w-60 h-60 flex items-center justify-center bg-transparent" aria-hidden>
+            {/* 鲸鱼图标入口：手机端缩小，桌面端保持原尺寸 */}
+            <div className="shrink-0 w-28 h-28 md:w-60 md:h-60 flex items-center justify-center bg-transparent" aria-hidden>
               <Image src="/icon_main_JingYun.png" alt="" width={240} height={240} className="w-full h-full object-contain" unoptimized />
             </div>
           </section>
 
-          {/* 右：金刚经 */}
-          <div className="order-3 flex md:flex md:justify-start items-center md:items-stretch overflow-x-auto md:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-3 px-3 md:mx-0 md:px-0">
+          {/* 右：金刚经（桌面端；手机端见上方竖排区域） */}
+          <div className="order-3 hidden md:flex md:justify-start items-stretch overflow-x-auto md:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-3 px-3 md:mx-0 md:px-0">
             {rightClassic.map((s, i) => {
               const p = pastelCards[(i + 1) % pastelCards.length]
               return (
@@ -401,12 +508,14 @@ export default function HomePage() {
             className="overflow-x-auto overflow-y-hidden px-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
           >
             <div className="flex gap-2 md:gap-4 min-w-max justify-center py-1">
-              {[...bottomClassics, ...bottomClassics].map((s, i) => {
-                // 基于书籍在原始数组中的索引选择样式和封面，确保重复时使用相同样式
-                const originalIndex = i % bottomClassics.length
-                const p = pastelCards[originalIndex % pastelCards.length]
-                const coverImage = bottomCoverImages[originalIndex % bottomCoverImages.length]
-                return (
+              {(() => {
+                const list = isMobile ? bottomStripClassicsOnly : bottomClassics
+                return [...list, ...list].map((s, i) => {
+                  const originalIndex = i % list.length
+                  const globalIndex = isMobile ? splitIndex + originalIndex : originalIndex
+                  const p = pastelCards[globalIndex % pastelCards.length]
+                  const coverImage = bottomCoverImages[globalIndex % bottomCoverImages.length]
+                  return (
                   <button
                     key={`${s.label}-${i}`}
                     type="button"
@@ -448,8 +557,9 @@ export default function HomePage() {
                       </span>
                     </div>
                   </button>
-                )
-              })}
+                  )
+                })
+              })()}
             </div>
           </div>
         </div>

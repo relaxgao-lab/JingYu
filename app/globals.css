@@ -61,8 +61,11 @@
     @apply bg-background text-foreground;
     font-family: "LXGW WenKai", sans-serif;
     padding-bottom: env(safe-area-inset-bottom, 0);
+    padding-left: env(safe-area-inset-left, 0);
+    padding-right: env(safe-area-inset-right, 0);
     overscroll-behavior-y: none;
     overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
   }
   pre,
   code {
@@ -218,4 +221,11 @@
   margin-top: 1.25rem;
   font-weight: normal;
   letter-spacing: 0.08em;
+}
+
+/* 移动端：背景不固定，避免 iOS 性能问题与白屏 */
+@media (max-width: 768px) {
+  .mobile-bg-scroll {
+    background-attachment: scroll !important;
+  }
 }
