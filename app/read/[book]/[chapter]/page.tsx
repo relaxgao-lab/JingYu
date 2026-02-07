@@ -1104,7 +1104,7 @@ export default function ReadPage() {
               {messages.length === 0 && (
                 <div className="text-center text-sm text-gray-500 mt-8">
                   <p>有什么问题想了解吗？</p>
-                  <p className="mt-2 text-xs">可以询问本章的含义、背景或相关智慧</p>
+                  <p className="mt-2 text-xs">可以询问本章的含义、背景 or 相关智慧</p>
                 </div>
               )}
               {messages.map((msg, i) => (
@@ -1112,15 +1112,13 @@ export default function ReadPage() {
                   key={i}
                   className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
                 >
-                  <div
-                    className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
-                      msg.role === "assistant"
-                        ? "bg-emerald-500 text-white"
-                        : "bg-violet-500 text-white"
-                    }`}
-                  >
-                    {msg.role === "assistant" ? "AI" : "我"}
-                  </div>
+                  {msg.role === "user" && (
+                    <div
+                      className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium bg-violet-500 text-white"
+                    >
+                      我
+                    </div>
+                  )}
                   <div
                     className={`flex-1 min-w-0 text-sm leading-relaxed ${
                       msg.role === "user"
@@ -1165,9 +1163,6 @@ export default function ReadPage() {
               ))}
               {isLoadingChat && (
                 <div className="flex gap-3">
-                  <div className="shrink-0 w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-medium text-white">
-                    AI
-                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="inline-block rounded-2xl bg-gray-50 border border-gray-100 px-4 py-2 text-sm text-gray-600">
                       正在思考...
