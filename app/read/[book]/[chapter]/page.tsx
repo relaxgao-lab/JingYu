@@ -767,22 +767,48 @@ export default function ReadPage() {
                   {pageTitle}
                 </h1>
               )}
-              <Button
-                variant="ghost"
-                onClick={() => setShowToc(true)}
-                className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 shrink-0 min-h-[44px] touch-manipulation"
-                title="目录"
-                aria-label="目录"
-              >
-                <List className="h-4 w-4 mr-1" />
-                <span className="hidden sm:inline">目录</span>
-              </Button>
+              <div className="flex items-center gap-1 md:gap-2 shrink-0">
+                {/* PC端字体调整 - 放在Header右侧 */}
+                {!isMobile && (
+                  <div className="flex items-center bg-gray-100/80 rounded-lg p-0.5 mr-1 border border-gray-200">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setFontSize(prev => Math.max(12, prev - 2))}
+                      className="h-8 w-8 text-gray-500 hover:text-gray-900 hover:bg-white/50 rounded-md"
+                      title="减小字体"
+                    >
+                      <span className="text-xs font-bold">A-</span>
+                    </Button>
+                    <div className="w-px h-3.5 bg-gray-300 mx-0.5"></div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setFontSize(prev => Math.min(40, prev + 2))}
+                      className="h-8 w-8 text-gray-500 hover:text-gray-900 hover:bg-white/50 rounded-md"
+                      title="增大字体"
+                    >
+                      <span className="text-sm font-bold">A+</span>
+                    </Button>
+                  </div>
+                )}
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowToc(true)}
+                  className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 shrink-0 min-h-[44px] touch-manipulation"
+                  title="目录"
+                  aria-label="目录"
+                >
+                  <List className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">目录</span>
+                </Button>
+              </div>
             </div>
           </div>
           <div ref={contentScrollRef} className="flex-1 overflow-y-auto min-h-0 scroll-smooth">
             {/* 内容区：正文或版本详情（全宽），移除过渡动画避免闪动 */}
-            {/* 所有内容都使用 items-center 居中显示，因为章节内容都是短篇，居中更美观 */}
-            <div className="min-h-full flex items-center justify-center">
+            {/* 调整为中间偏上布局：使用 padding-bottom 让内容在视觉上更靠上 */}
+            <div className="min-h-full flex flex-col items-center pt-8 md:pt-12 pb-32">
               {!showContent ? (
                 <div className="flex items-center justify-center py-20 min-h-[60vh]">
                   <span className="text-gray-500 text-sm">加载中...</span>
@@ -965,29 +991,6 @@ export default function ReadPage() {
                   >
                     <ChevronLeft className="h-5 w-5 md:h-6 md:w-6" />
                   </Button>
-                  
-                  {/* 桌面端字体调整 - 放在左侧导航下方 */}
-                  <div className="flex flex-col items-center bg-white/90 backdrop-blur-sm rounded-full p-1 border border-gray-200 shadow-sm">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setFontSize(prev => Math.min(40, prev + 2))}
-                      className="h-10 w-10 text-gray-600 hover:text-gray-900 rounded-full"
-                      title="增大字体"
-                    >
-                      <span className="text-sm font-bold">A+</span>
-                    </Button>
-                    <div className="h-px w-4 bg-gray-200 my-1"></div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setFontSize(prev => Math.max(12, prev - 2))}
-                      className="h-10 w-10 text-gray-600 hover:text-gray-900 rounded-full"
-                      title="减小字体"
-                    >
-                      <span className="text-xs font-bold">A-</span>
-                    </Button>
-                  </div>
                 </div>
               </div>
               <div className="absolute right-3 md:right-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
