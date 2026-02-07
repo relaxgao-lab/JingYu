@@ -689,7 +689,7 @@ export default function ReadPage() {
     '盈': 'yíng', '锐': 'ruì', '纷': 'fēn', '谷': 'gǔ', '神': 'shén', '门': 'mén',
     '根': 'gēn', '若': 'ruò', '狗': 'gǒu', '屈': 'qū', '竭': 'jié', '攴': 'pū',
     '浴': 'yù', '涣': 'huàn', '释': 'shì', '俨': 'yǎn', '魇': 'yǎn', '阽': 'diàn',
-    '棙': 'lì', '缗': 'mín', '鬻': 'yù', '牡': 'mǔ', '弥': 'mí'
+    '棙': 'lì', '缗': 'mín', '鬻': 'yù', '牡': 'mǔ', '弥': 'mí', '烹': 'pēng' 
   }
 
   // 为文本中的生僻字添加读音标注（使用 HTML ruby 标签）
@@ -836,7 +836,7 @@ export default function ReadPage() {
                               userSelect: 'text', 
                               WebkitUserSelect: 'text', 
                               letterSpacing: '0.08em',
-                              fontSize: `${fontSize}px`,
+                              fontSize: `${mounted ? fontSize : 22}px`,
                               lineHeight: 1.6
                             }}
                           >
@@ -865,7 +865,7 @@ export default function ReadPage() {
                                    <p 
                                      key={i}
                                      className="leading-[1.6] lg:leading-[1.7] text-gray-800 text-left font-bold"
-                                     style={{ letterSpacing: '0.08em', fontSize: `${fontSize}px` }}
+                                     style={{ letterSpacing: '0.08em', fontSize: `${mounted ? fontSize : 22}px` }}
                                      dangerouslySetInnerHTML={{ __html: annotatedLine }}
                                    />
                                   )
@@ -1048,8 +1048,8 @@ export default function ReadPage() {
           <div
             className={`flex flex-col flex-1 min-w-0 h-full bg-white border-l border-gray-200 max-md:w-full max-md:min-w-0 max-md:pt-[env(safe-area-inset-top)] max-md:pb-[env(safe-area-inset-bottom)] max-md:shadow-[-4px_0_20px_rgba(0,0,0,0.08)] ${!effectiveChatOpen ? "max-md:translate-x-full max-md:invisible" : "max-md:translate-x-0 max-md:visible"}`}
             style={{
-              width: isMobile ? "100%" : chatWidth,
-              minWidth: isMobile ? 0 : MIN_CHAT_WIDTH,
+              width: isMobile ? "100%" : (mounted ? chatWidth : DEFAULT_CHAT_WIDTH),
+              minWidth: isMobile ? 0 : (mounted ? MIN_CHAT_WIDTH : DEFAULT_CHAT_WIDTH),
               transform: effectiveChatOpen ? "translateX(0)" : "translateX(100%)",
               transition: isMobile || !allowChatTransition || isResizing || isChapterChanging || justRestoredOpenRef.current ? "none" : "transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)",
             }}
