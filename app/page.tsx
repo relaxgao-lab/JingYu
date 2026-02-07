@@ -93,7 +93,6 @@ export default function HomePage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [comingSoonMessage, setComingSoonMessage] = useState<string | null>(null)
   const bottomStripRef = useRef<HTMLDivElement>(null)
-  const bottomStripRef2 = useRef<HTMLDivElement>(null)
   const [bottomStripPaused, setBottomStripPaused] = useState(false)
   const bottomStripResumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   /** 标记本轮是否因触摸而暂停，只有为 true 时松开才启动 3 秒恢复计时，避免未 pause 就 schedule 导致逻辑错乱 */
@@ -164,29 +163,6 @@ export default function HomePage() {
         if (segmentWidth <= 0) return
         el.scrollLeft += step
         if (el.scrollLeft >= segmentWidth - step) el.scrollLeft -= segmentWidth
-      }, 30)
-      return () => clearInterval(interval)
-    }
-  }, [bottomStripPaused])
-
-  // 底部第二行：初始滚动位置（从中间开始，便于往右无缝循环）
-  useEffect(() => {
-    const t = requestAnimationFrame(() => {
-      const el = bottomStripRef2.current
-      if (el && el.scrollWidth > 0) el.scrollLeft = el.scrollWidth / 2
-    })
-    return () => cancelAnimationFrame(t)
-  }, [])
-  useEffect(() => {
-    if (bottomStripRef2.current && !bottomStripPaused) {
-      const el = bottomStripRef2.current
-      const step = 1
-      const interval = setInterval(() => {
-        if (!el || bottomStripPaused) return
-        const segmentWidth = el.scrollWidth / 2
-        if (segmentWidth <= 0) return
-        el.scrollLeft -= step
-        if (el.scrollLeft <= 0) el.scrollLeft = segmentWidth - step
       }, 30)
       return () => clearInterval(interval)
     }
@@ -370,12 +346,12 @@ export default function HomePage() {
           </div>
 
           {/* 手机端：道德经 + 金刚经 左右并排、竖版站立 */}
-          <div className="order-2 flex md:hidden flex-row items-center justify-center gap-4 mb-3 shrink-0">
+          <div className="order-2 flex md:hidden flex-row items-center justify-center gap-6 mb-3 shrink-0">
             <button
               type="button"
               onClick={() => handleReadClassic('daodejing')}
               disabled={isLoading}
-              className="relative flex items-center justify-center shrink-0 w-[112px] h-[176px] rounded-r-lg border-t-2 border-r-2 border-b-2 border-gray-300 hover:shadow-2xl hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 disabled:opacity-60 transition-all touch-manipulation overflow-hidden"
+              className="relative flex items-center justify-center shrink-0 w-[134px] h-[211px] rounded-r-lg border-t-2 border-r-2 border-b-2 border-gray-300 hover:shadow-2xl hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 disabled:opacity-60 transition-all touch-manipulation overflow-hidden"
               aria-label="读道德经"
               style={{
                 backgroundImage: "url('/cover_daodejing.jpg')",
@@ -393,7 +369,7 @@ export default function HomePage() {
               type="button"
               onClick={() => handleBookClick('金刚经')}
               disabled={isLoading}
-              className="relative flex items-center justify-center shrink-0 w-[112px] h-[176px] rounded-l-lg border-t-2 border-l-2 border-b-2 border-gray-300 hover:shadow-2xl hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 disabled:opacity-60 transition-all touch-manipulation overflow-hidden"
+              className="relative flex items-center justify-center shrink-0 w-[134px] h-[211px] rounded-l-lg border-t-2 border-l-2 border-b-2 border-gray-300 hover:shadow-2xl hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 disabled:opacity-60 transition-all touch-manipulation overflow-hidden"
               aria-label="读金刚经"
               style={{
                 backgroundImage: "url('/cover_jingangjing.jpg')",
@@ -479,7 +455,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* 底部：其余经典（pastel 卡片风格）；第一行往左滚，第二行往右滚 */}
+        {/* 底部：一行自动滚动经典 */}
         <div
           className="shrink-0 w-full pt-1 md:pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]"
           onTouchStartCapture={pauseBottomStrip}
@@ -501,48 +477,7 @@ export default function HomePage() {
                     type="button"
                     onClick={() => handleBookClick(s.label)}
                     disabled={isLoading}
-                    className={`relative flex items-center justify-center shrink-0 w-24 md:w-32 h-32 md:h-40 rounded-r-sm md:rounded-r-md border-t border-r border-b border-gray-300 hover:shadow-xl hover:scale-[1.05] focus:outline-none focus:ring-2 ${p.ring} focus:ring-offset-2 disabled:opacity-60 transition-transform touch-manipulation overflow-hidden`}
-                    aria-label={`读${s.label}`}
-                    style={{
-                      backgroundImage: `url('${coverImage}')`,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center',
-                      backgroundRepeat: 'no-repeat',
-                      boxShadow: '6px 4px 12px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.08), inset -1px 0 4px rgba(0,0,0,0.1)',
-                    }}
-                  >
-                    <div className={`absolute inset-0 ${p.bg} opacity-60 rounded-r-sm md:rounded-r-md pointer-events-none`}></div>
-                    <div className="absolute left-0 top-0 bottom-0 w-2 bg-gradient-to-b from-gray-600 via-gray-500 to-gray-600 rounded-l-sm shadow-inner z-10">
-                      <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gradient-to-b from-white/20 via-transparent to-white/20"></div>
-                    </div>
-                    <div className="absolute inset-1 border border-gray-400/30 rounded-sm pointer-events-none z-10"></div>
-                    <div className="relative z-20 flex items-center justify-center">
-                      <span className="text-sm md:text-base font-bold text-gray-900 tracking-wider drop-shadow-sm" style={{ fontFamily: 'serif', writingMode: 'vertical-rl', textOrientation: 'upright', letterSpacing: '0.1em' }}>
-                        {s.label}
-                      </span>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-          {/* 第二行：往右滚动 */}
-          <div
-            ref={bottomStripRef2}
-            className="overflow-x-auto overflow-y-hidden px-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-          >
-            <div className="flex gap-2 md:gap-4 min-w-max justify-center py-1">
-              {[...bottomClassics, ...bottomClassics].map((s, i) => {
-                const originalIndex = i % bottomClassics.length
-                const p = pastelCards[(originalIndex + 3) % pastelCards.length]
-                const coverImage = bottomCoverImages[originalIndex % bottomCoverImages.length]
-                return (
-                  <button
-                    key={`2-${s.label}-${i}`}
-                    type="button"
-                    onClick={() => handleBookClick(s.label)}
-                    disabled={isLoading}
-                    className={`relative flex items-center justify-center shrink-0 w-24 md:w-32 h-32 md:h-40 rounded-r-sm md:rounded-r-md border-t border-r border-b border-gray-300 hover:shadow-xl hover:scale-[1.05] focus:outline-none focus:ring-2 ${p.ring} focus:ring-offset-2 disabled:opacity-60 transition-transform touch-manipulation overflow-hidden`}
+                    className={`relative flex items-center justify-center shrink-0 w-[7.2rem] md:w-32 h-[9.6rem] md:h-40 rounded-r-sm md:rounded-r-md border-t border-r border-b border-gray-300 hover:shadow-xl hover:scale-[1.05] focus:outline-none focus:ring-2 ${p.ring} focus:ring-offset-2 disabled:opacity-60 transition-transform touch-manipulation overflow-hidden`}
                     aria-label={`读${s.label}`}
                     style={{
                       backgroundImage: `url('${coverImage}')`,

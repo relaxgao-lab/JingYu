@@ -1,6 +1,24 @@
 "use client"
 
 import React, { useState, useEffect, useLayoutEffect, useRef } from "react"
+
+const MOBILE_CHAT_KEY = "read-mobile-chat-open"
+const CLEARED_FLAG = "__readPageClearedThisLoad"
+/** 每次刷新只清一次；多实例时若 key 已是 "1"（用户刚点打开）则不再清 */
+function clearMobileChatKeyOnce() {
+  try {
+    if (typeof window === "undefined") return
+    const already = (window as unknown as Record<string, boolean>)[CLEARED_FLAG]
+    if (already) {
+      if (sessionStorage.getItem(MOBILE_CHAT_KEY) === "1") return
+      sessionStorage.removeItem(MOBILE_CHAT_KEY)
+      return
+    }
+    ;(window as unknown as Record<string, boolean>)[CLEARED_FLAG] = true
+    sessionStorage.removeItem(MOBILE_CHAT_KEY)
+  } catch {}
+}
+
 import Image from "next/image"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -72,41 +90,110 @@ export default function ReadPage() {
     return DEFAULT_CHAT_WIDTH
   })
   const [isResizing, setIsResizing] = useState(false)
+  const [isChapterChanging, setIsChapterChanging] = useState(false)
   const resizeStartX = useRef(0)
   const resizeStartWidth = useRef(0)
   const lastChatWidthRef = useRef(chatWidth)
   const [showToc, setShowToc] = useState(false)
+  // 首帧与服务端一致，避免水合报错；挂载后再用 matchMedia 更新
   const [isMobile, setIsMobile] = useState(false)
-  // 桌面端默认打开；移动端默认关闭，便于先看正文；若有已保存的偏好则从 localStorage 恢复
-  const [isChatOpen, setIsChatOpen] = useState(() => {
-    if (typeof window === "undefined") return true
-    const mobile = window.innerWidth < 768
-    if (mobile) return false
-    try {
-      const saved = localStorage.getItem("read-chat-open")
-      if (saved !== null) return saved === "true"
-    } catch {
-      // 保持默认打开
-    }
-    return true
-  })
+  const [allowChatTransition, setAllowChatTransition] = useState(false)
+  // 首帧统一为 false，避免服务端/客户端不一致；PC 在挂载后从 localStorage 恢复
+  const [isChatOpen, setIsChatOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  const prevRouteRef = useRef({ bookId: bookId ?? "", chapterParam: chapterParam ?? "" })
+  const routeEffectRunRef = useRef(false)
+  /** 刚从 localStorage 恢复为打开，本帧及下两帧不播过渡，避免切章后重播展开动画 */
+  const justRestoredOpenRef = useRef(false)
+  // 手机端：state 或（挂载后读 sessionStorage）任一为开则显示；PC 只认 isChatOpen；挂载前不读 session 防水合
+  const effectiveChatOpen =
+    isMobile
+      ? (isChatOpen || (mounted && typeof window !== "undefined" && sessionStorage.getItem(MOBILE_CHAT_KEY) === "1"))
+      : isChatOpen
 
   useLayoutEffect(() => {
-    try {
-      const saved = localStorage.getItem("read-chat-open")
-      if (saved !== null) setIsChatOpen(saved === "true")
-    } catch {
-      // 保持默认打开
+    clearMobileChatKeyOnce()
+  }, [])
+  // PC：挂载后从 localStorage 恢复聊天开关；手机保持默认关。恢复时先关过渡+打标再setState；未恢复时再开过渡
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return
+    const isM = window.matchMedia("(max-width: 767px)").matches
+    setIsMobile(isM)
+    if (!isM) {
+      try {
+        const saved = localStorage.getItem("read-chat-open")
+        if (saved !== "false") {
+          setAllowChatTransition(false)
+          justRestoredOpenRef.current = true
+          setIsChatOpen(true)
+          return
+        }
+      } catch {}
+    }
+    // 如果不恢复打开，则在两帧后开启过渡，确保后续手动点击有动画
+    let raf1: number, raf2: number
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        setAllowChatTransition(true)
+      })
+    })
+    return () => {
+      cancelAnimationFrame(raf1)
+      if (raf2 != null) cancelAnimationFrame(raf2)
     }
   }, [])
 
   useEffect(() => {
+    setMounted(true)
+  }, [])
+  // 仅在「已渲染为打开」之后才在两帧后清 ref 并开过渡，避免 rAF 早于 React 提交导致“打开”帧带过渡
+  useEffect(() => {
+    if (!effectiveChatOpen || !justRestoredOpenRef.current) return
+    let raf1: number, raf2: number
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        justRestoredOpenRef.current = false
+        setAllowChatTransition(true)
+      })
+    })
+    return () => {
+      cancelAnimationFrame(raf1)
+      if (raf2 != null) cancelAnimationFrame(raf2)
+    }
+  }, [effectiveChatOpen])
+  useLayoutEffect(() => {
+    prevRouteRef.current = { bookId: bookId ?? "", chapterParam: chapterParam ?? "" }
+  })
+
+  // 切章时手机端关聊天；首屏/刷新时 effect 首 run 不关，避免“点打开后被打回”
+  useEffect(() => {
+    const isMobileWidth = typeof window !== "undefined" && window.innerWidth < 768
+    const routeChanged =
+      prevRouteRef.current.bookId !== (bookId ?? "") || prevRouteRef.current.chapterParam !== (chapterParam ?? "")
+    const isRealNav = routeEffectRunRef.current
+    routeEffectRunRef.current = true
+    if (routeChanged && isMobileWidth && isRealNav) {
+      try {
+        sessionStorage.removeItem(MOBILE_CHAT_KEY)
+      } catch {}
+      setIsChatOpen(false)
+    }
+    if (routeChanged) {
+      prevRouteRef.current = { bookId: bookId ?? "", chapterParam: chapterParam ?? "" }
+    }
+  }, [bookId, chapterParam])
+
+  // 仅挂载后再写入，避免切章重挂载时先用初始 false 覆盖 localStorage 导致 PC 恢复不到“打开”
+  useEffect(() => {
+    if (!mounted || typeof window === "undefined") return
     localStorage.setItem("read-chat-open", isChatOpen.toString())
-  }, [isChatOpen])
+  }, [mounted, isChatOpen])
 
   useEffect(() => {
     const mql = window.matchMedia("(max-width: 767px)")
-    const update = () => setIsMobile(mql.matches)
+    const update = () => {
+      setIsMobile(mql.matches)
+    }
     update()
     mql.addEventListener("change", update)
     return () => mql.removeEventListener("change", update)
@@ -114,7 +201,6 @@ export default function ReadPage() {
 
   const contentScrollRef = useRef<HTMLDivElement>(null)
   const contentAreaRef = useRef<HTMLDivElement>(null)
-  const [isChapterChanging, setIsChapterChanging] = useState(false)
   const [contentAreaWidth, setContentAreaWidth] = useState<number>(0)
   
   // 使用 sessionStorage 保存上一个章节参数，避免组件重新挂载时丢失
@@ -161,10 +247,6 @@ export default function ReadPage() {
 
   // 使用 useLayoutEffect 同步更新，在浏览器绘制前完成，避免闪烁
   useLayoutEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:150',message:'useLayoutEffect entry',data:{bookId,chapterParam,currentChapterNum,chapter:chapter?chapter.chapter:null,loading,isVersionPage:currentChapterNum===0&&hasVersionPage(bookId)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,E'})}).catch(()=>{});
-    // #endregion
-    
     if (!bookId || chapterParam === undefined || chapterParam === '') {
       router.push('/')
       return
@@ -175,11 +257,7 @@ export default function ReadPage() {
       return
     }
     const isVersionPage = num === 0 && hasVersionPage(bookId)
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:160',message:'After parse params',data:{num,isVersionPage,hasChapter:!isVersionPage?hasChapter(bookId,num):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-    
+
     if (!isVersionPage && !hasChapter(bookId, num)) {
       router.push('/')
       return
@@ -188,9 +266,6 @@ export default function ReadPage() {
     // 如果章节号相同且已有数据，跳过更新（避免不必要的重新渲染）
     // 但需要确保数据确实存在，如果 chapter 为 null 且不是版本页，需要重新加载
     if (num === currentChapterNum && chapter !== null) {
-      // #region agent log
-      fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:168',message:'Skipping update - chapter exists',data:{num,currentChapterNum,chapterExists:chapter!==null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       // 确保 sceneMeta 已设置（刷新页面时可能未设置）
       if (!sceneMeta && chapter) {
         setSceneMeta({
@@ -211,15 +286,9 @@ export default function ReadPage() {
     // 但需要确保数据确实存在，如果版本说明不存在，需要重新加载
     if (num === currentChapterNum && isVersionPage) {
       const book = getBook(bookId)
-      // #region agent log
-      fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:178',message:'Version page check',data:{num,currentChapterNum,hasVersionNote:!!book?.versionNote,loading},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
-      // #endregion
       if (book?.versionNote) {
         // 如果已经有版本说明且不在加载状态，跳过更新
         if (!loading) {
-          // #region agent log
-          fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:182',message:'Skipping version page update',data:{loading},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
           // 确保 sceneMeta 已设置（刷新页面时可能未设置）
           if (!sceneMeta) {
             setSceneMeta({
@@ -253,9 +322,6 @@ export default function ReadPage() {
     // 同步更新状态，确保在浏览器绘制前完成
     // 关键：先设置loading=false和isChapterChanging，避免显示"加载中..."导致闪屏
     if (isVersionPage) {
-      // #region agent log
-      fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:206',message:'Version page branch',data:{bookId,hasVersionNote:!!book?.versionNote},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       // 如果检测到切换，立即禁用动画
       if (isChanging) {
         setIsChapterChanging(true)
@@ -273,15 +339,9 @@ export default function ReadPage() {
           context: `正在阅读《${bookId}》的版本说明`,
           scenario: "读者对书籍的版本和背景感兴趣"
         })
-        // #region agent log
-        fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:217',message:'Version page state updated',data:{loadingSet:false,currentChapterNumSet:0,chapterSet:null,sceneMetaSet:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
       }
     } else {
       const ch = getChapter(bookId, num)
-      // #region agent log
-      fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:226',message:'getChapter result',data:{bookId,num,chapterFound:!!ch,chapterNum:ch?.chapter},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       if (ch) {
         // 如果检测到切换，立即禁用动画
         if (isChanging) {
@@ -299,13 +359,7 @@ export default function ReadPage() {
           context: `正在阅读《${bookId}》第${ch.chapter}章：${ch.title}`,
           scenario: "读者对当前章节内容有疑问或想深入了解"
         })
-        // #region agent log
-        fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:235',message:'State updated after getChapter',data:{chapterSet:true,loadingSet:false,currentChapterNumSet:num},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
       } else {
-        // #region agent log
-        fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:245',message:'Chapter not found, redirecting',data:{bookId,num},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
         // 如果章节不存在，跳转到首页
         router.push('/')
       }
@@ -341,7 +395,7 @@ export default function ReadPage() {
     return () => {
       resizeObserver.disconnect()
     }
-  }, [isChatOpen, chatWidth, chapter, currentChapterNum])
+  }, [effectiveChatOpen, chatWidth, chapter, currentChapterNum])
 
   // 滚动操作单独处理，在内容渲染后执行
   useEffect(() => {
@@ -658,12 +712,6 @@ export default function ReadPage() {
     ? "版本说明" 
     : (chapter?.title ? formatTitleWithArabicNumbers(chapter.title, currentChapterNum) : "")
   const showContent = !loading && (chapter !== null || isVersionPage)
-  
-  // #region agent log
-  if (typeof window !== 'undefined') {
-    fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:607',message:'showContent calculation',data:{loading,chapter:chapter?{num:chapter.chapter,hasTitle:!!chapter.title,hasContent:!!chapter.content,contentLength:chapter.content?.length}:null,isVersionPage,showContent,showContentType:typeof showContent,pageEntered,isInitialChapterChange},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'E'})}).catch(()=>{});
-  }
-  // #endregion
 
   return (
     <div
@@ -677,8 +725,8 @@ export default function ReadPage() {
           ref={contentAreaRef}
           className="shrink-0 min-w-0 flex flex-col overflow-hidden border-r border-gray-200 bg-white relative w-full md:w-auto"
           style={{
-            width: isMobile ? "100%" : isChatOpen ? `calc(100% - ${chatWidth}px - 6px)` : "100%",
-            transition: (isResizing || isChapterChanging) ? "none" : "width 0.55s cubic-bezier(0.25, 0.1, 0.25, 1)",
+            width: isMobile ? "100%" : effectiveChatOpen ? `calc(100% - ${chatWidth}px - 6px)` : "100%",
+            transition: isMobile || !allowChatTransition || isResizing || isChapterChanging || justRestoredOpenRef.current ? "none" : "width 0.55s cubic-bezier(0.25, 0.1, 0.25, 1)",
           }}
         >
           {/* 页面内导航：返回首页、标题、目录（章节信息在页脚） */}
@@ -722,10 +770,7 @@ export default function ReadPage() {
               ) : (
                 <>
                   {/* 正文内容：不设置最小高度，让短内容自然居中显示，响应式宽度，为导航按钮留出空间 */}
-                  <article className="read-content max-w-[42rem] lg:max-w-[50rem] xl:max-w-[58rem] 2xl:max-w-[66rem] w-full mx-auto py-6 md:py-8 px-4 md:px-0" style={{ paddingLeft: isMobile ? 'max(1rem, env(safe-area-inset-left, 1rem))' : contentAreaWidth > 700 ? '4rem' : contentAreaWidth > 600 ? '3.5rem' : contentAreaWidth > 550 ? '3rem' : '2rem', paddingRight: isMobile ? 'max(1rem, env(safe-area-inset-right, 1rem))' : contentAreaWidth > 700 ? '4rem' : contentAreaWidth > 600 ? '3.5rem' : contentAreaWidth > 550 ? '3rem' : '2rem' }}>
-                      {/* #region agent log */}
-                      {typeof window !== 'undefined' && void fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:673',message:'Render branch check',data:{showContent,isVersionPage,chapter:chapter?chapter.chapter:null,hasContent:chapter?.content?chapter.content.length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'E'})}).catch(()=>{})}
-                      {/* #endregion */}
+                  <article className="read-content max-w-[42rem] lg:max-w-[50rem] xl:max-w-[58rem] 2xl:max-w-[66rem] w-full mx-auto py-6 md:py-8 px-4 md:px-0 pb-24 md:pb-8" style={{ paddingLeft: isMobile ? 'max(1rem, env(safe-area-inset-left, 1rem))' : contentAreaWidth > 700 ? '4rem' : contentAreaWidth > 600 ? '3.5rem' : contentAreaWidth > 550 ? '3rem' : '2rem', paddingRight: isMobile ? 'max(1rem, env(safe-area-inset-right, 1rem))' : contentAreaWidth > 700 ? '4rem' : contentAreaWidth > 600 ? '3.5rem' : contentAreaWidth > 550 ? '3rem' : '2rem' }}>
                       {isVersionPage ? (
                         <>
                           {/* 版本详情页 - 居中显示，优化排版 */}
@@ -744,9 +789,6 @@ export default function ReadPage() {
                       ) : chapter ? (
                         <>
                           {/* 章节正文 - 居中显示，适合短篇内容 */}
-                          {/* #region agent log */}
-                          {typeof window !== 'undefined' && void fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:688',message:'Rendering chapter content',data:{chapterNum:chapter.chapter,hasContent:!!chapter.content,contentLength:chapter.content?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'E'})}).catch(()=>{})}
-                          {/* #endregion */}
                           <div 
                             className="read-body select-text w-full text-gray-800"
                             style={{ fontFamily: '"LXGW WenKai", "Noto Serif SC", serif', userSelect: 'text', WebkitUserSelect: 'text' }}
@@ -770,12 +812,7 @@ export default function ReadPage() {
                           </div>
                         </>
                       ) : (
-                        <>
-                          {/* #region agent log */}
-                          {typeof window !== 'undefined' && void fetch('http://127.0.0.1:7245/ingest/e108c5d0-f6ea-4a4b-af5a-e2e6d0e30a2c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:715',message:'Chapter is null in render',data:{showContent,isVersionPage,chapter:null},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'E'})}).catch(()=>{})}
-                          {/* #endregion */}
-                          null
-                        </>
+                        <>null</>
                       )}
                   </article>
                 </>
@@ -783,7 +820,7 @@ export default function ReadPage() {
             </div>
           </div>
           {/* 页脚：始终在底部；移动端增加上一章/下一章导航 */}
-          <footer className="shrink-0 py-4 px-4 md:px-6 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-gray-200 bg-white">
+          <footer className="shrink-0 py-4 px-4 md:px-6 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-gray-200 bg-white max-md:fixed max-md:bottom-0 max-md:left-0 max-md:right-0 max-md:z-20">
             <div className="max-w-[44rem] lg:max-w-[52rem] xl:max-w-[60rem] 2xl:max-w-[68rem] mx-auto">
               {/* 移动端：上一章 / 下一章 按钮 */}
               <div className="flex md:hidden items-center justify-center gap-3 mb-3">
@@ -905,30 +942,30 @@ export default function ReadPage() {
           onMouseDown={handleResizeStart}
           className={`hidden md:flex shrink-0 flex-col items-center justify-center bg-gray-200 hover:bg-emerald-400 active:bg-emerald-500 cursor-col-resize select-none overflow-hidden ${
             isResizing ? "bg-emerald-500" : ""
-          } ${isChatOpen ? "w-1.5" : "w-0 pointer-events-none"}`}
-          style={{ transition: isResizing ? "none" : "width 0.55s cubic-bezier(0.25, 0.1, 0.25, 1)" }}
+          } ${effectiveChatOpen ? "w-1.5" : "w-0 pointer-events-none"}`}
+          style={{ transition: isMobile || !allowChatTransition || isResizing || isChapterChanging || justRestoredOpenRef.current ? "none" : "width 0.55s cubic-bezier(0.25, 0.1, 0.25, 1)" }}
         >
           <div className="w-0.5 h-8 rounded-full bg-gray-400 group-hover:bg-white pointer-events-none shrink-0" />
         </div>
 
-        {/* 右侧：AI 聊天窗口；移动端为固定全屏遮罩，从右向左滑入/滑出 */}
+        {/* 右侧：AI 聊天窗口；移动端固定从右滑入/滑出，仅用 transform 控制，无遮罩 */}
         <div
-          className={`flex flex-col shrink-0 overflow-hidden ${!isChatOpen ? "pointer-events-none" : ""} max-md:fixed max-md:inset-0 max-md:z-50 max-md:flex max-md:flex-col ${
-            isChatOpen ? "max-md:flex" : "max-md:pointer-events-none"
+          className={`flex flex-col shrink-0 overflow-hidden ${!effectiveChatOpen ? "pointer-events-none" : ""} max-md:fixed max-md:inset-0 max-md:z-50 max-md:flex max-md:flex-col ${
+            effectiveChatOpen ? "max-md:flex" : "max-md:pointer-events-none"
           } max-md:bg-transparent`}
           style={{
-            width: isMobile ? "100%" : isChatOpen ? chatWidth : 0,
-            minWidth: isMobile ? "100%" : isChatOpen ? MIN_CHAT_WIDTH : 0,
-            transition: isResizing ? "none" : "width 0.55s cubic-bezier(0.25, 0.1, 0.25, 1)",
+            width: isMobile ? "100%" : effectiveChatOpen ? chatWidth : 0,
+            minWidth: isMobile ? "100%" : effectiveChatOpen ? MIN_CHAT_WIDTH : 0,
+            transition: isMobile || !allowChatTransition || isResizing || isChapterChanging || justRestoredOpenRef.current ? "none" : "width 0.55s cubic-bezier(0.25, 0.1, 0.25, 1)",
           }}
         >
           <div
-            className="flex flex-col flex-1 min-w-0 h-full bg-white border-l border-gray-200 max-md:w-full max-md:min-w-0 max-md:pt-[env(safe-area-inset-top)] max-md:pb-[env(safe-area-inset-bottom)] max-md:shadow-[-4px_0_20px_rgba(0,0,0,0.08)]"
+            className={`flex flex-col flex-1 min-w-0 h-full bg-white border-l border-gray-200 max-md:w-full max-md:min-w-0 max-md:pt-[env(safe-area-inset-top)] max-md:pb-[env(safe-area-inset-bottom)] max-md:shadow-[-4px_0_20px_rgba(0,0,0,0.08)] ${!effectiveChatOpen ? "max-md:translate-x-full max-md:invisible" : "max-md:translate-x-0 max-md:visible"}`}
             style={{
               width: isMobile ? "100%" : chatWidth,
               minWidth: isMobile ? 0 : MIN_CHAT_WIDTH,
-              transform: isChatOpen ? "translateX(0)" : "translateX(100%)",
-              transition: isResizing ? "none" : "transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)",
+              transform: effectiveChatOpen ? "translateX(0)" : "translateX(100%)",
+              transition: isMobile || !allowChatTransition || isResizing || isChapterChanging || justRestoredOpenRef.current ? "none" : "transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)",
             }}
           >
             {/* 聊天标题：移动端加大关闭按钮触控区 */}
@@ -961,7 +998,12 @@ export default function ReadPage() {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  onClick={() => setIsChatOpen(false)}
+                  onClick={() => {
+                    try {
+                      sessionStorage.removeItem(MOBILE_CHAT_KEY)
+                    } catch {}
+                    setIsChatOpen(false)
+                  }}
                   className="h-10 w-10 md:h-8 md:w-8 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md touch-manipulation"
                   title="关闭聊天"
                   aria-label="关闭聊天"
@@ -1132,10 +1174,15 @@ export default function ReadPage() {
           </div>
         </div>
         {/* 聊天窗口开关按钮（仅在关闭时显示，固定贴视口右边缘） */}
-        {!isChatOpen && (
-          <div className="fixed right-0 z-[100] flex justify-end pointer-events-none top-1/2 -translate-y-1/2 md:top-1/2 max-md:top-auto max-md:translate-y-0 max-md:bottom-[max(1rem,env(safe-area-inset-bottom))]">
+        {!effectiveChatOpen && (
+          <div className="fixed right-0 z-[100] flex justify-end pointer-events-none top-1/2 -translate-y-1/2 md:top-1/3 md:-translate-y-1/2 max-md:top-auto max-md:translate-y-0 max-md:bottom-[max(1rem,env(safe-area-inset-bottom))]">
             <Button
-              onClick={() => setIsChatOpen(true)}
+              onClick={() => {
+                try {
+                  sessionStorage.setItem(MOBILE_CHAT_KEY, "1")
+                } catch {}
+                setIsChatOpen(true)
+              }}
               className="pointer-events-auto h-14 w-14 md:h-20 md:pl-5 md:pr-4 md:w-auto rounded-l-2xl rounded-r-none bg-gray-200/95 hover:bg-gray-300/95 text-gray-700 shadow-md border border-l border-gray-300/50 flex items-center justify-center gap-2 transition-all hover:shadow-lg active:scale-[0.98] touch-manipulation min-h-[48px]"
               title="打开 AI 助手"
               aria-label="打开 AI 助手"
