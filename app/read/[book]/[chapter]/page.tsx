@@ -28,6 +28,7 @@ import { getChapter, getChapters, getTotalChapters, getNextChapter, getPrevChapt
 import { whisperSpeechService, type SpeechStatus } from "@/app/conversation/whisper-speech-service"
 import { TTS_PROVIDER } from "@/config"
 import { Chapter } from "@/app/read/types"
+import { rareCharPronunciations, presetPrompts, presetColors, chapterCardColors } from "../../constants"
 
 interface Message {
   role: "user" | "assistant"
@@ -647,12 +648,6 @@ export default function ReadPage() {
   const navNextColor = presetColors[1]
   const voiceToggleColor = presetColors[4]
   const fontSizeColor = presetColors[3]
-  const presetPrompts = [
-    { label: "讲解", text: "请用现代人容易听懂的白话文讲解这一章的意思。" },
-    { label: "大意", text: "请用白话文概括本章大意。" },
-    { label: "重点", text: "请用白话文说明本章有哪些重点。" },
-    { label: "联系现实", text: "请用白话文说说本章对现代人有什么启发。" },
-  ]
   const handlePreset = (text: string) => {
     if (!sceneMeta || isLoadingChat || speechStatus === "recording" || speechStatus === "processing") return
     sendMessage(text)
@@ -667,29 +662,6 @@ export default function ReadPage() {
       return title.replace(chineseNumberPattern, `第${chapterNum}章`)
     }
     return title
-  }
-
-  // 生僻字读音映射表（道德经中的生僻字）
-  const rareCharPronunciations: Record<string, string> = {
-    '攘': 'rǎng', '颣': 'lèi', '渝': 'yú', '隅': 'yú', '琭': 'lù', '珞': 'luò',
-    '蹶': 'jué', '讷': 'nè', '咎': 'jiù', '刍': 'chú', '牖': 'yǒu', '歙': 'xī',
-    '兕': 'sì', '虿': 'chài', '虺': 'huǐ', '螫': 'shì', '攫': 'jué', '牝': 'pìn',
-    '嗄': 'shà', '刿': 'guì', '啬': 'sè', '柢': 'dǐ', '莅': 'lì', '徼': 'jiào',
-    '橐': 'tuó', '籥': 'yuè', '埏': 'shān', '埴': 'zhí', '畋': 'tián', '诘': 'jié',
-    '皦': 'jiǎo', '惚': 'hū', '恍': 'huǎng', '澹': 'dàn', '飂': 'liáo', '窈': 'yǎo',
-    '赘': 'zhuì', '辎': 'zī', '谪': 'zhé', '楗': 'jiàn', '忒': 'tè', '羸': 'léi',
-    '隳': 'huī', '毂': 'gǔ', '辐': 'fú', '辙': 'zhé', '瑕': 'xiá', '筹': 'chóu',
-    '袭': 'xí', '矜': 'jīn', '恬': 'tián', '譬': 'pì', '恃': 'shì', '饵': 'ěr',
-    '斲': 'zhuó', '繟': 'chǎn', '狎': 'xiá', '湛': 'zhàn', '挫': 'cuò', '羁': 'jī',
-    '绠': 'gěng', '汲': 'jí', '怵': 'chù', '沕': 'mì', '暋': 'mǐn', '惛': 'hūn',
-    '沌': 'dùn', '呴': 'xǔ', '濡': 'rú', '壑': 'hè', '眴': 'shùn', '睨': 'nì',
-    '撄': 'yīng', '瘈': 'zhì', '瘼': 'mò', '瘵': 'zhài', '瘳': 'chōu', '瘰': 'luǒ',
-    '疴': 'kē', '痼': 'gù', '痃': 'xuán', '痄': 'zhà', '痦': 'wù', '痖': 'yǎ',
-    '痗': 'mèi', '冥': 'míng', '缪': 'miù', '懽': 'huān', '渊': 'yuān', '冲': 'chōng',
-    '盈': 'yíng', '锐': 'ruì', '纷': 'fēn', '谷': 'gǔ', '神': 'shén', '门': 'mén',
-    '根': 'gēn', '若': 'ruò', '狗': 'gǒu', '屈': 'qū', '竭': 'jié', '攴': 'pū',
-    '浴': 'yù', '涣': 'huàn', '释': 'shì', '俨': 'yǎn', '魇': 'yǎn', '阽': 'diàn',
-    '棙': 'lì', '缗': 'mín', '鬻': 'yù', '牡': 'mǔ', '弥': 'mí', '烹': 'pēng' 
   }
 
   // 为文本中的生僻字添加读音标注（使用 HTML ruby 标签）
