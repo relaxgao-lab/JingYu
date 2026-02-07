@@ -76,7 +76,7 @@ export default function ReadPage() {
 
   // 字体大小相关状态
   const [fontSize, setFontSize] = useState(() => {
-    if (typeof window === "undefined") return 18
+    if (typeof window === "undefined") return 22
     try {
       const saved = localStorage.getItem("read-font-size")
       if (saved) {
@@ -84,7 +84,7 @@ export default function ReadPage() {
         if (!isNaN(n) && n >= 12 && n <= 40) return n
       }
     } catch {}
-    return 18
+    return 22
   })
 
   useEffect(() => {
@@ -680,7 +680,16 @@ export default function ReadPage() {
     '赘': 'zhuì', '辎': 'zī', '谪': 'zhé', '楗': 'jiàn', '忒': 'tè', '羸': 'léi',
     '隳': 'huī', '毂': 'gǔ', '辐': 'fú', '辙': 'zhé', '瑕': 'xiá', '筹': 'chóu',
     '袭': 'xí', '矜': 'jīn', '恬': 'tián', '譬': 'pì', '恃': 'shì', '饵': 'ěr',
-    '斲': 'zhuó', '繟': 'chǎn', '狎': 'xiá'
+    '斲': 'zhuó', '繟': 'chǎn', '狎': 'xiá', '湛': 'zhàn', '挫': 'cuò', '羁': 'jī',
+    '绠': 'gěng', '汲': 'jí', '怵': 'chù', '沕': 'mì', '暋': 'mǐn', '惛': 'hūn',
+    '沌': 'dùn', '呴': 'xǔ', '濡': 'rú', '壑': 'hè', '眴': 'shùn', '睨': 'nì',
+    '撄': 'yīng', '瘈': 'zhì', '瘼': 'mò', '瘵': 'zhài', '瘳': 'chōu', '瘰': 'luǒ',
+    '疴': 'kē', '痼': 'gù', '痃': 'xuán', '痄': 'zhà', '痦': 'wù', '痖': 'yǎ',
+    '痗': 'mèi', '冥': 'míng', '缪': 'miù', '懽': 'huān', '渊': 'yuān', '冲': 'chōng',
+    '盈': 'yíng', '锐': 'ruì', '纷': 'fēn', '谷': 'gǔ', '神': 'shén', '门': 'mén',
+    '根': 'gēn', '若': 'ruò', '狗': 'gǒu', '屈': 'qū', '竭': 'jié', '攴': 'pū',
+    '浴': 'yù', '涣': 'huàn', '释': 'shì', '俨': 'yǎn', '魇': 'yǎn', '阽': 'diàn',
+    '棙': 'lì', '缗': 'mín', '鬻': 'yù', '牡': 'mǔ', '弥': 'mí'
   }
 
   // 为文本中的生僻字添加读音标注（使用 HTML ruby 标签）
