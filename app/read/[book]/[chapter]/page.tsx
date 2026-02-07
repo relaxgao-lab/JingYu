@@ -23,7 +23,7 @@ import Image from "next/image"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { ChevronLeft, ChevronRight, List, Mic, MessageSquare, Send, StopCircle, Volume2, VolumeX, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, List, Mic, MessageSquare, Send, StopCircle, Volume2, VolumeX, X, Type } from "lucide-react"
 import { getChapter, getChapters, getTotalChapters, getNextChapter, getPrevChapter, hasChapter, hasVersionPage, getBook } from "@/lib/classics"
 import { whisperSpeechService, type SpeechStatus } from "@/app/conversation/whisper-speech-service"
 import { TTS_PROVIDER } from "@/config"
@@ -73,6 +73,25 @@ export default function ReadPage() {
   const isSpeechEnabledRef = useRef(false)
   isSpeechEnabledRef.current = isSpeechEnabled
   const userStoppedPlaybackRef = useRef(false)
+
+  // 字体大小相关状态
+  const [fontSize, setFontSize] = useState(() => {
+    if (typeof window === "undefined") return 18
+    try {
+      const saved = localStorage.getItem("read-font-size")
+      if (saved) {
+        const n = parseInt(saved, 10)
+        if (!isNaN(n) && n >= 12 && n <= 40) return n
+      }
+    } catch {}
+    return 18
+  })
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("read-font-size", fontSize.toString())
+    }
+  }, [fontSize])
 
   // AI 窗口宽度（可拖拽调整），默认 420px，范围 280 ~ 70vw
   const MIN_CHAT_WIDTH = 280
@@ -627,6 +646,7 @@ export default function ReadPage() {
   const navPrevColor = presetColors[0]
   const navNextColor = presetColors[1]
   const voiceToggleColor = presetColors[4]
+  const fontSizeColor = presetColors[3]
   const presetPrompts = [
     { label: "讲解", text: "请用现代人容易听懂的白话文讲解这一章的意思。" },
     { label: "大意", text: "请用白话文概括本章大意。" },
@@ -775,8 +795,15 @@ export default function ReadPage() {
                         <>
                           {/* 版本详情页 - 居中显示，优化排版 */}
                           <div 
-                            className="read-body select-text text-base md:text-lg lg:text-xl xl:text-[1.25rem] text-left w-full"
-                            style={{ fontFamily: '"LXGW WenKai", "Noto Serif SC", serif', userSelect: 'text', WebkitUserSelect: 'text', letterSpacing: '0.08em' }}
+                            className="read-body select-text text-left w-full"
+                            style={{ 
+                              fontFamily: '"LXGW WenKai", "Noto Serif SC", serif', 
+                              userSelect: 'text', 
+                              WebkitUserSelect: 'text', 
+                              letterSpacing: '0.08em',
+                              fontSize: `${fontSize}px`,
+                              lineHeight: 1.6
+                            }}
                           >
                             <div 
                               className="version-note-content"
@@ -800,12 +827,12 @@ export default function ReadPage() {
                                 .map((line, i) => {
                                   const annotatedLine = addPronunciationAnnotations(line)
                                   return (
-                                    <p 
-                                      key={i}
-                                      className="text-base md:text-lg lg:text-xl xl:text-[1.25rem] leading-[1.6] lg:leading-[1.7] text-gray-800 text-left font-bold"
-                                      style={{ letterSpacing: '0.08em' }}
-                                      dangerouslySetInnerHTML={{ __html: annotatedLine }}
-                                    />
+                                   <p 
+                                     key={i}
+                                     className="leading-[1.6] lg:leading-[1.7] text-gray-800 text-left font-bold"
+                                     style={{ letterSpacing: '0.08em', fontSize: `${fontSize}px` }}
+                                     dangerouslySetInnerHTML={{ __html: annotatedLine }}
+                                   />
                                   )
                                 })}
                             </div>
@@ -835,6 +862,30 @@ export default function ReadPage() {
                   <ChevronLeft className="h-5 w-5 mr-0.5" />
                   上一章
                 </Button>
+                
+                {/* 移动端字体调整 */}
+                <div className="flex items-center bg-gray-100 rounded-full p-1 border border-gray-200">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setFontSize(prev => Math.max(12, prev - 2))}
+                    className="h-9 w-9 text-gray-600 hover:text-gray-900 rounded-full"
+                    title="减小字体"
+                  >
+                    <span className="text-xs font-bold">A-</span>
+                  </Button>
+                  <div className="w-px h-4 bg-gray-300 mx-1"></div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setFontSize(prev => Math.min(40, prev + 2))}
+                    className="h-9 w-9 text-gray-600 hover:text-gray-900 rounded-full"
+                    title="增大字体"
+                  >
+                    <span className="text-sm font-bold">A+</span>
+                  </Button>
+                </div>
+
                 <Button
                   onClick={handleNextChapter}
                   disabled={getNextChapter(bookId, currentChapterNum) === null}
@@ -902,7 +953,7 @@ export default function ReadPage() {
           {!isMobile && contentAreaWidth > 550 && (
             <>
               <div className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
-                <div className="pointer-events-auto">
+                <div className="pointer-events-auto flex flex-col gap-4 items-center">
                   <Button
                     onClick={handlePrevChapter}
                     disabled={getPrevChapter(bookId, currentChapterNum) === null}
@@ -914,6 +965,29 @@ export default function ReadPage() {
                   >
                     <ChevronLeft className="h-5 w-5 md:h-6 md:w-6" />
                   </Button>
+                  
+                  {/* 桌面端字体调整 - 放在左侧导航下方 */}
+                  <div className="flex flex-col items-center bg-white/90 backdrop-blur-sm rounded-full p-1 border border-gray-200 shadow-sm">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setFontSize(prev => Math.min(40, prev + 2))}
+                      className="h-10 w-10 text-gray-600 hover:text-gray-900 rounded-full"
+                      title="增大字体"
+                    >
+                      <span className="text-sm font-bold">A+</span>
+                    </Button>
+                    <div className="h-px w-4 bg-gray-200 my-1"></div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setFontSize(prev => Math.max(12, prev - 2))}
+                      className="h-10 w-10 text-gray-600 hover:text-gray-900 rounded-full"
+                      title="减小字体"
+                    >
+                      <span className="text-xs font-bold">A-</span>
+                    </Button>
+                  </div>
                 </div>
               </div>
               <div className="absolute right-3 md:right-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
@@ -1175,7 +1249,7 @@ export default function ReadPage() {
         </div>
         {/* 聊天窗口开关按钮（仅在关闭时显示，固定贴视口右边缘） */}
         {!effectiveChatOpen && (
-          <div className="fixed right-0 z-[100] flex justify-end pointer-events-none top-1/2 -translate-y-1/2 md:top-1/3 md:-translate-y-1/2 max-md:top-auto max-md:translate-y-0 max-md:bottom-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className="fixed right-0 z-[100] flex justify-end pointer-events-none top-1/2 -translate-y-1/2 md:top-1/3 md:-translate-y-1/2 max-md:top-auto max-md:translate-y-0 max-md:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+90px)]">
             <Button
               onClick={() => {
                 try {
