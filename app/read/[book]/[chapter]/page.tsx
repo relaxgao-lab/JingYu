@@ -23,7 +23,7 @@ import Image from "next/image"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { ChevronLeft, ChevronRight, List, Mic, MessageSquare, Send, StopCircle, Volume2, VolumeX, X, Type } from "lucide-react"
+import { ChevronLeft, ChevronRight, List, Mic, MessageSquare, Send, StopCircle, Volume2, VolumeX, X, Type, Sparkles } from "lucide-react"
 import { getChapter, getChapters, getTotalChapters, getNextChapter, getPrevChapter, hasChapter, hasVersionPage, getBook } from "@/lib/classics"
 import { whisperSpeechService, type SpeechStatus } from "@/app/conversation/whisper-speech-service"
 import { TTS_PROVIDER } from "@/config"
@@ -74,6 +74,9 @@ export default function ReadPage() {
   const isSpeechEnabledRef = useRef(false)
   isSpeechEnabledRef.current = isSpeechEnabled
   const userStoppedPlaybackRef = useRef(false)
+
+  // 选中的句子（用于点击高亮和深度解析）
+  const [selectedSentence, setSelectedSentence] = useState<string | null>(null)
 
   // 字体大小相关状态
   const [fontSize, setFontSize] = useState(() => {
@@ -473,6 +476,37 @@ export default function ReadPage() {
     }
   }
 
+  const handleSentenceClick = (sentence: string) => {
+    const cleanSentence = sentence.trim();
+    if (!cleanSentence) return;
+    
+    // 如果点击的是当前已选中的，则取消选中
+    if (selectedSentence === cleanSentence) {
+      setSelectedSentence(null);
+      return;
+    }
+    
+    setSelectedSentence(cleanSentence);
+  }
+
+  const handleConfirmAnalysis = () => {
+    if (!selectedSentence) return;
+    
+    // 确保 AI 窗口打开
+    if (!effectiveChatOpen) {
+      try {
+        sessionStorage.setItem(MOBILE_CHAT_KEY, "1");
+      } catch {}
+      setIsChatOpen(true);
+    }
+    
+    // 发送深度解析指令
+    sendMessage(`请深度解析这一段经文：\n“${selectedSentence}”`);
+    
+    // 解析后立即清除选中状态，隐藏工具条
+    setSelectedSentence(null);
+  }
+
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoadingChat || !sceneMeta) return
 
@@ -741,12 +775,17 @@ export default function ReadPage() {
                 ← 返回首页
               </Button>
               {showContent && (
-                <h1 
-                  className="text-base md:text-xl lg:text-2xl xl:text-[1.75rem] font-semibold text-gray-900 tracking-tight text-center leading-tight flex-1 min-w-0 truncate"
-                  style={{ fontFamily: '"LXGW WenKai", "Noto Serif SC", serif' }}
-                >
-                  {pageTitle}
-                </h1>
+                <div className="flex-1 min-w-0 flex flex-col items-center">
+                  <h1 
+                    className="text-base md:text-xl lg:text-2xl xl:text-[1.75rem] font-semibold text-gray-900 tracking-tight text-center leading-tight truncate w-full"
+                    style={{ fontFamily: '"LXGW WenKai", "Noto Serif SC", serif' }}
+                  >
+                    {pageTitle}
+                  </h1>
+                  <p className="text-[10px] md:text-xs text-amber-600/80 font-medium mt-0.5 animate-pulse">
+                    提示：点击经文段落可选中并进行深度解析
+                  </p>
+                </div>
               )}
               <div className="flex items-center gap-1 md:gap-2 shrink-0">
                 {/* PC端字体调整 - 放在Header右侧 */}
@@ -827,19 +866,28 @@ export default function ReadPage() {
                             className="read-body select-text w-full text-gray-800"
                             style={{ fontFamily: '"LXGW WenKai", "Noto Serif SC", serif', userSelect: 'text', WebkitUserSelect: 'text' }}
                           >
-                            <div className="space-y-2">
+                            <div className="space-y-4">
                               {chapter.content
                                 .split('\n')
                                 .filter(Boolean)
                                 .map((line, i) => {
                                   const annotatedLine = addPronunciationAnnotations(line)
+                                  const isSelected = selectedSentence === line.trim()
                                   return (
-                                   <p 
-                                     key={i}
-                                     className="leading-[1.6] lg:leading-[1.7] text-gray-800 text-left font-bold"
-                                     style={{ letterSpacing: '0.08em', fontSize: `${mounted ? fontSize : 22}px` }}
-                                     dangerouslySetInnerHTML={{ __html: annotatedLine }}
-                                   />
+                                    <div
+                                      key={i}
+                                      onClick={() => handleSentenceClick(line)}
+                                      className={`group relative cursor-pointer transition-all duration-300 rounded-xl p-3 -mx-3 border border-transparent hover:bg-amber-50/80 hover:border-amber-100 ${isSelected ? "bg-amber-100/90 shadow-sm ring-1 ring-amber-200 border-amber-200" : ""}`}
+                                    >
+                                      {/* 左侧装饰条，提示可点击 */}
+                                      <div className={`absolute left-0 top-3 bottom-3 w-0.5 rounded-full bg-amber-200/50 opacity-0 group-hover:opacity-100 transition-opacity ${isSelected ? "opacity-100 bg-amber-500" : ""}`} />
+                                      
+                                      <p 
+                                        className="leading-[1.6] lg:leading-[1.7] text-gray-800 text-left font-bold"
+                                        style={{ letterSpacing: '0.08em', fontSize: `${mounted ? fontSize : 22}px` }}
+                                        dangerouslySetInnerHTML={{ __html: annotatedLine }}
+                                      />
+                                    </div>
                                   )
                                 })}
                             </div>
@@ -1074,9 +1122,13 @@ export default function ReadPage() {
             {/* 消息列表 */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.length === 0 && (
-                <div className="text-center text-sm text-gray-500 mt-8">
-                  <p>有什么问题想了解吗？</p>
-                  <p className="mt-2 text-xs">可以询问本章的含义、背景 or 相关智慧</p>
+                <div className="text-center text-sm text-gray-500 mt-8 space-y-3">
+                  <p className="font-medium">有什么问题想了解吗？</p>
+                  <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800 leading-relaxed">
+                    <p>💡 <b>新功能提示：</b></p>
+                    <p className="mt-1">你可以直接<b>点击左侧的经文段落</b>，我会针对你选中的内容进行深度解析。</p>
+                  </div>
+                  <p className="text-xs">或者询问本章的含义、背景 or 相关智慧</p>
                 </div>
               )}
               {messages.map((msg, i) => (
@@ -1244,6 +1296,36 @@ export default function ReadPage() {
                 <Image src="/icon_jingyu.png?v=whale" alt="" width={80} height={80} className="w-full h-full object-contain bg-transparent" aria-hidden unoptimized />
               </span>
             </Button>
+          </div>
+        )}
+
+        {/* 选中经文后的浮动操作条 (移动端 & PC 通用) */}
+        {selectedSentence && (
+          <div className="fixed bottom-[calc(max(1rem,env(safe-area-inset-bottom))+60px)] left-1/2 -translate-x-1/2 z-[110] w-[92%] max-w-lg animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="bg-white/95 backdrop-blur-md border border-amber-200 shadow-xl rounded-2xl p-3 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] text-amber-600 font-medium mb-0.5">已选中经文</p>
+                <p className="text-xs text-gray-700 truncate font-bold italic">“{selectedSentence}”</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setSelectedSentence(null)}
+                  className="h-9 px-3 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl"
+                >
+                  取消
+                </Button>
+                <Button 
+                  size="sm" 
+                  onClick={handleConfirmAnalysis}
+                  className="h-9 px-4 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-sm flex items-center gap-1.5 font-bold"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  深度解析
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </div>

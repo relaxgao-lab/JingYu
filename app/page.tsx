@@ -84,6 +84,12 @@ const bookNameToId: Record<string, string> = {
   '六祖坛经': 'liuzutanjing',
   '孙子兵法': 'sunzibingfa',
   '黄帝内经': 'huangdineijing',
+  'Jingangjing': 'jingangjing',
+  '金剛經': 'jingangjing',
+  '金刚经 ': 'jingangjing',
+  ' 金刚经': 'jingangjing',
+  '清静经': 'qingjingjing',
+  '清靜經': 'qingjingjing'
 }
 
 export default function HomePage() {
@@ -176,7 +182,8 @@ export default function HomePage() {
 
   // 处理书籍点击：检查是否有内容，有则跳转阅读页，无则显示提示
   const handleBookClick = (bookName: string) => {
-    const bookId = bookNameToId[bookName]
+    const trimmedName = bookName.trim();
+    const bookId = bookNameToId[trimmedName] || bookNameToId[bookName];
     if (!bookId) {
       setComingSoonMessage(`${bookName} 内容正在制作中`)
       setTimeout(() => setComingSoonMessage(null), 3000)
