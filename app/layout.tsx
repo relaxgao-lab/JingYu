@@ -5,7 +5,7 @@ const siteUrl = 'https://jingyu.relaxgao.com'
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: '经鱼·心随经转',
-  description: '经鱼·心随经转，AI让你成为自己的老师，与你一起读懂经典，读懂自己',
+  description: 'AI让你成为自己的老师，与你一起读懂经典，读懂自己',
   keywords: ['经鱼', '心随经转', 'AI', '经典', '道德经', '金刚经', '心经', '六祖坛经'],
   authors: [{ name: 'RelaxGao' }],
   creator: 'RelaxGao',
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
     url: siteUrl,
     siteName: '经鱼·心随经转',
     title: '经鱼·心随经转',
-    description: '经鱼·心随经转，AI让你成为自己的老师，与你一起读懂经典，读懂自己',
+    description: 'AI让你成为自己的老师，与你一起读懂经典，读懂自己',
     images: [
       {
         url: '/og-image.png',
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: '经鱼·心随经转',
-    description: '经鱼·心随经转，AI让你成为自己的老师，与你一起读懂经典，读懂自己',
+    description: 'AI让你成为自己的老师，与你一起读懂经典，读懂自己',
     images: ['/og-image.png'],
   },
   robots: {
