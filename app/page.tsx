@@ -89,7 +89,9 @@ const bookNameToId: Record<string, string> = {
   '金刚经 ': 'jingangjing',
   ' 金刚经': 'jingangjing',
   '清静经': 'qingjingjing',
-  '清靜經': 'qingjingjing'
+  '清靜經': 'qingjingjing',
+  '心经': 'xinjing',
+  '心經': 'xinjing'
 }
 
 export default function HomePage() {

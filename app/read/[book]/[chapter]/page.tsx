@@ -682,6 +682,17 @@ export default function ReadPage() {
   const navNextColor = presetColors[1]
   const voiceToggleColor = presetColors[4]
   const fontSizeColor = presetColors[3]
+  // 根据书籍篇幅动态调整快捷按钮文案
+  const isFullText = totalChapters <= 1
+  const dynamicPresetPrompts = presetPrompts.map(p => {
+    return {
+      ...p,
+      // 保持原始简洁标签，范围通过上方的 Badge 体现
+      label: p.label,
+      text: isFullText ? p.text.replace('这一章', '整篇经文').replace('本章', '整篇经文') : p.text
+    }
+  })
+
   const handlePreset = (text: string) => {
     if (!sceneMeta || isLoadingChat || speechStatus === "recording" || speechStatus === "processing") return
     sendMessage(text)
@@ -1078,7 +1089,7 @@ export default function ReadPage() {
             <div className="shrink-0 px-4 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:pt-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <h3 className="text-sm font-semibold text-gray-700">AI 解读助手</h3>
-                <p className="text-xs text-gray-500 mt-0.5">基于当前章节内容提问</p>
+                <p className="text-xs text-gray-500 mt-0.5">基于{isFullText ? '整篇经文' : '当前章节'}内容提问</p>
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -1126,9 +1137,8 @@ export default function ReadPage() {
                   <p className="font-medium">有什么问题想了解吗？</p>
                   <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800 leading-relaxed">
                     <p>💡 <b>新功能提示：</b></p>
-                    <p className="mt-1">你可以直接<b>点击左侧的经文段落</b>，我会针对你选中的内容进行深度解析。</p>
+                    <p className="mt-1">你可以直接<b>点击页面的经文段落</b>，我会针对你选中的内容进行深度解析。或者直接点击以下快捷按钮</p>
                   </div>
-                  <p className="text-xs">或者询问本章的含义、背景 or 相关智慧</p>
                 </div>
               )}
               {messages.map((msg, i) => (
@@ -1199,8 +1209,8 @@ export default function ReadPage() {
 
             {/* 默认快捷按钮 */}
             <div className="shrink-0 px-4 py-2 border-t border-gray-100 bg-gray-50/80">
-              <div className="flex flex-wrap gap-2">
-                {presetPrompts.map((p, i) => {
+              <div className="flex flex-wrap gap-x-3 gap-y-3 pt-1">
+                {dynamicPresetPrompts.map((p, i) => {
                   const c = presetColors[i % presetColors.length]
                   return (
                     <Button
@@ -1210,8 +1220,16 @@ export default function ReadPage() {
                       size="sm"
                       disabled={!sceneMeta || isLoadingChat || speechStatus === "recording" || speechStatus === "processing"}
                       onClick={() => handlePreset(p.text)}
-                      className={`text-xs h-8 px-3 rounded-full border ${c.bg} ${c.border} ${c.text} ${c.hover} disabled:opacity-50`}
+                      className={`relative text-xs h-9 px-4 rounded-xl border ${c.bg} ${c.border} ${c.text} ${c.hover} disabled:opacity-50 transition-all`}
                     >
+                      {/* 按钮上的微型标签 */}
+                      <span className={`absolute -top-2 -right-1.5 px-1.5 py-0.5 rounded-md border text-[8px] font-bold shadow-sm scale-90 z-10 ${
+                        isFullText 
+                          ? 'bg-blue-50 text-blue-600 border-blue-200' 
+                          : 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                      }`}>
+                        {isFullText ? '全文' : '本章'}
+                      </span>
                       {p.label}
                     </Button>
                   )
