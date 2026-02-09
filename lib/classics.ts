@@ -3,6 +3,10 @@ import daodejingData from '@/data/classics/daodejing.json'
 import jingangjingData from '@/data/classics/jingangjing.json'
 import qingjingjingData from '@/data/classics/qingjingjing.json'
 import xinjingData from '@/data/classics/xinjing.json'
+import jiezishuData from '@/data/classics/jiezishu.json'
+import huangdineijingData from '@/data/classics/huangdineijing.json'
+import nanhuajingData from '@/data/classics/nanhuajing.json'
+import zengguangxianwenData from '@/data/classics/zengguangxianwen.json'
 
 // 书籍标识映射
 const bookMap: Record<string, Book> = {
@@ -14,6 +18,15 @@ const bookMap: Record<string, Book> = {
   '清静经': qingjingjingData as Book,
   'xinjing': xinjingData as Book,
   '心经': xinjingData as Book,
+  'jiezishu': jiezishuData as Book,
+  '诫子书': jiezishuData as Book,
+  'huangdineijing': huangdineijingData as Book,
+  '黄帝内经': huangdineijingData as Book,
+  'nanhuajing': nanhuajingData as Book,
+  '南华经': nanhuajingData as Book,
+  '庄子': nanhuajingData as Book,
+  'zengguangxianwen': zengguangxianwenData as Book,
+  '增广贤文': zengguangxianwenData as Book,
 }
 
 /**
@@ -51,7 +64,7 @@ export function getTotalChapters(bookId: string): number {
 }
 
 /** 有独立版本详情页的书籍（进入时先显示版本说明，再进入第一章） */
-const BOOKS_WITH_VERSION_PAGE: string[] = ['daodejing', 'jingangjing', 'qingjingjing', 'xinjing']
+const BOOKS_WITH_VERSION_PAGE: string[] = ['daodejing', 'jingangjing', 'qingjingjing', 'xinjing', 'jiezishu', 'huangdineijing', 'nanhuajing', 'zengguangxianwen']
 
 /**
  * 是否有版本详情页（第 0 页）

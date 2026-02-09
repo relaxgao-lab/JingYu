@@ -28,19 +28,14 @@ const rightClassic = [
 const bottomClassics = [
   // 心经
   { label: "心经", value: "《心经》，佛教核心经典", intro: "佛教核心经典" },
-  // 道教经典（去掉道德经）
+  // 经典名篇
   { label: "南华经", value: "《南华经》（庄子），道家重要经典", intro: "道家重要经典" },
+  { label: "增广贤文", value: "《增广贤文》，民间处世智慧百科", intro: "民间处世智慧百科" },
   { label: "冲虚真经", value: "《冲虚真经》（列子），道家经典", intro: "道家经典" },
-  { label: "文始真经", value: "《文始真经》（关尹子），道家经典", intro: "道家经典" },
-  { label: "通玄真经", value: "《通玄真经》（文子），道家经典", intro: "道家经典" },
-  { label: "黄庭经", value: "《黄庭经》，道教养生经典", intro: "道教养生经典" },
-  { label: "阴符经", value: "《阴符经》，道教重要经典", intro: "道教重要经典" },
   { label: "清静经", value: "《清静经》（常清静经），道教经典", intro: "道教经典" },
+  { label: "诫子书", value: "《诫子书》，诸葛亮家训经典", intro: "诸葛亮家训经典" },
   { label: "太上感应篇", value: "《太上感应篇》，道教劝善经典", intro: "道教劝善经典" },
-  { label: "抱朴子", value: "《抱朴子》，道教重要经典", intro: "道教重要经典" },
-  // 佛教经典（去掉金刚经）
   { label: "六祖坛经", value: "《六祖坛经》，禅宗重要经典", intro: "禅宗重要经典" },
-  // 其他经典
   { label: "孙子兵法", value: "《孙子兵法》，兵家经典", intro: "兵家经典" },
   { label: "黄帝内经", value: "《黄帝内经》，医学经典", intro: "医学经典" },
 ]
@@ -73,15 +68,13 @@ const bookNameToId: Record<string, string> = {
   '金刚经': 'jingangjing',
   '心经': 'xinjing',
   '南华经': 'nanhuajing',
+  '庄子': 'nanhuajing',
+  '增广贤文': 'zengguangxianwen',
   '冲虚真经': 'chongxuzhenjing',
-  '文始真经': 'wenshizhenjing',
-  '通玄真经': 'tongxuanzhenjing',
-  '黄庭经': 'huangtingjing',
-  '阴符经': 'yinfujing',
   '清静经': 'qingjingjing',
   '太上感应篇': 'taishangganyingpian',
-  '抱朴子': 'baopuzi',
   '六祖坛经': 'liuzutanjing',
+  '诫子书': 'jiezishu',
   '孙子兵法': 'sunzibingfa',
   '黄帝内经': 'huangdineijing',
   'Jingangjing': 'jingangjing',
@@ -91,7 +84,11 @@ const bookNameToId: Record<string, string> = {
   '清静经': 'qingjingjing',
   '清靜經': 'qingjingjing',
   '心经': 'xinjing',
-  '心經': 'xinjing'
+  '心經': 'xinjing',
+  '诫子书': 'jiezishu',
+  '誡子書': 'jiezishu',
+  '黄帝内经': 'huangdineijing',
+  '黃帝內經': 'huangdineijing'
 }
 
 export default function HomePage() {
