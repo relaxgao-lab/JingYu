@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from "react"
 
 const MOBILE_CHAT_KEY = "read-mobile-chat-open"
+const READ_GUIDE_KEY = "read-guide-seen"
 const CLEARED_FLAG = "__readPageClearedThisLoad"
 /** 每次刷新只清一次；多实例时若 key 已是 "1"（用户刚点打开）则不再清 */
 function clearMobileChatKeyOnce() {
@@ -23,12 +24,12 @@ import Image from "next/image"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { ChevronLeft, ChevronRight, List, Mic, MessageSquare, Send, StopCircle, Volume2, VolumeX, X, Type, Sparkles } from "lucide-react"
+import { ChevronLeft, ChevronRight, HelpCircle, List, Mic, MessageSquare, Play, Send, StopCircle, Volume2, VolumeX, X, Type, Sparkles } from "lucide-react"
 import { getChapter, getChapters, getTotalChapters, getNextChapter, getPrevChapter, hasChapter, hasVersionPage, getBook } from "@/lib/classics"
 import { whisperSpeechService, type SpeechStatus } from "@/app/conversation/whisper-speech-service"
 import { TTS_PROVIDER } from "@/config"
 import { Chapter } from "@/app/read/types"
-import { rareCharPronunciations, presetPrompts, presetColors, chapterCardColors } from "../../constants"
+import { rareCharPronunciations, presetPrompts, presetColors, chapterCardColors, GUIDE_VIDEO_URL } from "../../constants"
 
 interface Message {
   role: "user" | "assistant"
@@ -118,6 +119,10 @@ export default function ReadPage() {
   const resizeStartWidth = useRef(0)
   const lastChatWidthRef = useRef(chatWidth)
   const [showToc, setShowToc] = useState(false)
+  // 首次进入阅读页引导浮层（仅未看过时显示）
+  const [showReadGuide, setShowReadGuide] = useState(false)
+  const [showVideoInGuide, setShowVideoInGuide] = useState(false)
+  const readGuideCheckedRef = useRef(false)
   // 首帧与服务端一致，避免水合报错；挂载后再用 matchMedia 更新
   const [isMobile, setIsMobile] = useState(false)
   const [allowChatTransition, setAllowChatTransition] = useState(false)
@@ -169,6 +174,19 @@ export default function ReadPage() {
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // 首次进入阅读页：内容加载完成后，若用户未看过引导，则显示浮层
+  useEffect(() => {
+    if (typeof window === "undefined" || !mounted || readGuideCheckedRef.current) return
+    const contentReady = !loading && (chapter !== null || (currentChapterNum === 0 && bookId && hasVersionPage(bookId)))
+    if (!contentReady) return
+    readGuideCheckedRef.current = true
+    try {
+      if (localStorage.getItem(READ_GUIDE_KEY) !== "1") {
+        setShowReadGuide(true)
+      }
+    } catch {}
+  }, [mounted, loading, chapter, currentChapterNum, bookId])
   // 仅在「已渲染为打开」之后才在两帧后清 ref 并开过渡，避免 rAF 早于 React 提交导致“打开”帧带过渡
   useEffect(() => {
     if (!effectiveChatOpen || !justRestoredOpenRef.current) return
@@ -764,6 +782,83 @@ export default function ReadPage() {
       className={`h-screen flex flex-col bg-stone-50/60 ${pageEntered && !isChapterChanging ? "transition-opacity duration-300 ease-out" : ""} ${pageEntered ? "opacity-100" : "opacity-0"}`}
       aria-busy={!pageEntered}
     >
+      {/* 首次进入阅读页引导浮层 */}
+      {showReadGuide && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+            onClick={() => setShowReadGuide(false)}
+            aria-hidden
+          />
+          <div className="relative bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-6 animate-[fadeIn_0.2s_ease-in-out_forwards]">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">新手指南</h3>
+            <ol className="space-y-3 text-sm text-gray-600 mb-4 list-decimal list-inside">
+              <li>点击 <span className="inline-flex align-middle"><Image src="/icon_main_JingYun.png" alt="经鱼" width={20} height={20} className="object-contain" unoptimized /></span> 图标打开AI助手，使用「讲解」「大意」等快捷提问</li>
+              <li>或点击经文句子请求深度解析</li>
+            </ol>
+            {GUIDE_VIDEO_URL && (
+              <div className="mb-6">
+                {!showVideoInGuide ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowVideoInGuide(true)}
+                    className="w-full justify-center gap-2"
+                  >
+                    <Play className="h-4 w-4" />
+                    观看视频教程
+                  </Button>
+                ) : (
+                  <div className="rounded-lg overflow-hidden border border-gray-200 bg-black aspect-video">
+                    {(() => {
+                      const url: string = GUIDE_VIDEO_URL
+                      const bvidMatch = url.match(/BV[\w]+/)
+                      const bvid = bvidMatch ? bvidMatch[0] : (url.startsWith("BV") ? url : null)
+                      return bvid ? (
+                        <iframe
+                          src={`https://player.bilibili.com/player.html?bvid=${bvid}&autoplay=1`}
+                          title="经鱼使用教程"
+                          className="w-full h-full"
+                          allowFullScreen
+                        />
+                      ) : (
+                        <video
+                          src={url}
+                          controls
+                          autoPlay
+                          className="w-full h-full"
+                        />
+                      )
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowReadGuide(false)}
+                className="text-gray-600"
+              >
+                我知道了
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  try {
+                    localStorage.setItem(READ_GUIDE_KEY, "1")
+                  } catch {}
+                  setShowReadGuide(false)
+                }}
+              >
+                不再提示
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 主要内容区域 - 左右分栏，右侧宽度可拖拽 */}
       <div className="flex-1 flex overflow-hidden">
         {/* 左侧：章节内容（宽度与聊天窗口同步过渡，拖拽时无动画） */}
@@ -823,6 +918,19 @@ export default function ReadPage() {
                     </Button>
                   </div>
                 )}
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setShowVideoInGuide(false)
+                    setShowReadGuide(true)
+                  }}
+                  className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 shrink-0 min-h-[44px] touch-manipulation"
+                  title="新手指南"
+                  aria-label="新手指南"
+                >
+                  <HelpCircle className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">新手指南</span>
+                </Button>
                 <Button
                   variant="ghost"
                   onClick={() => setShowToc(true)}

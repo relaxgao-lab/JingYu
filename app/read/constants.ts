@@ -35,6 +35,14 @@ export const rareCharPronunciations: Record<string, string> = {
 };
 
 /**
+ * 新手指南视频教程
+ * - B站：填入 bvid 或完整链接，如 "BV1xx411c7mD" 或 "https://www.bilibili.com/video/BV1xx411c7mD"
+ * - 直链：填入 mp4 等视频 URL，如 "https://example.com/tutorial.mp4"
+ * - 留空则不显示视频入口
+ */
+export const GUIDE_VIDEO_URL: string = "https://pub-fa97267c827340709c51f56ca976e06e.r2.dev/user-guide.mp4"
+
+/**
  * AI 助手的快捷提问词
  */
 export const presetPrompts = [
